@@ -264,7 +264,7 @@ export async function POST(request: Request) {
     };
     
     // Return the result
-    log('Sending response', { available: !conflictingAppointment, message, response });
+    log('Sending response', response);
     return NextResponse.json(
       response,
       { headers: corsHeaders }
