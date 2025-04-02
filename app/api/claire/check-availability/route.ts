@@ -193,10 +193,18 @@ export async function POST(request: Request) {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+          'Access-Control-Max-Age': '86400',
         },
       });
     }
+
+    // Add CORS headers to the response
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+    };
 
     // Parse the request body
     const body = await request.json() as VapiToolCallWebhook;
@@ -369,7 +377,7 @@ export async function POST(request: Request) {
           result: responseMessage
         }
       ]
-    });
+    }, { headers });
   } catch (error) {
     console.error('Error checking availability:', error);
     return NextResponse.json(
@@ -381,21 +389,29 @@ export async function POST(request: Request) {
           }
         ]
       },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+        }
+      }
     );
   } finally {
     await prisma.$disconnect();
   }
 }
 
-// Add the OPTIONS handler for CORS
+// Update the OPTIONS handler for CORS
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+      'Access-Control-Max-Age': '86400',
     },
   });
 } 

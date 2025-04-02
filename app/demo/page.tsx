@@ -64,6 +64,18 @@ interface VapiMessage {
   };
   status?: string;
   endedReason?: string;
+  conversation?: Array<{
+    role: string;
+    content?: string;
+    tool_calls?: Array<{
+      id: string;
+      function?: {
+        name: string;
+        arguments?: string;
+      };
+    }>;
+    tool_call_id?: string;
+  }>;
 }
 
 const DemoPage: FC = () => {
@@ -217,6 +229,52 @@ const DemoPage: FC = () => {
         if (message.status === 'ended' && message.endedReason) {
           addLog('Info', `Call ended reason: ${message.endedReason}`);
         }
+      } else if (message.type === 'conversation-update' && message.conversation) {
+        // Process tool calls from conversation updates
+        const lastMessage = message.conversation[message.conversation.length - 1];
+        
+        if (lastMessage.role === 'assistant' && lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+          // Process each tool call in the conversation update
+          for (const toolCall of lastMessage.tool_calls) {
+            const toolCallId = toolCall.id;
+            const name = toolCall.function?.name || '';
+            const argsString = toolCall.function?.arguments || '{}';
+            let parameters = {};
+            
+            try {
+              parameters = JSON.parse(argsString);
+            } catch (e) {
+              console.error('Error parsing tool call arguments:', e);
+            }
+            
+            // Add to tool calls collection
+            setToolCalls(prev => {
+              // Check if this tool call is already in the list
+              const exists = prev.some(tc => tc.id === toolCallId);
+              if (exists) return prev;
+              
+              return [...prev, {
+                id: toolCallId,
+                name,
+                parameters,
+                timestamp,
+              }];
+            });
+          }
+        }
+        
+        // Process tool results from conversation updates
+        if (lastMessage.role === 'tool' && lastMessage.tool_call_id) {
+          const toolCallId = lastMessage.tool_call_id;
+          const result = lastMessage.content;
+          
+          // Update existing tool call with result
+          setToolCalls(prev => prev.map(tc =>
+            tc.id === toolCallId
+              ? { ...tc, result }
+              : tc
+          ));
+        }
       }
       // Add other message type handlers as needed
     };
@@ -331,7 +389,7 @@ const DemoPage: FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-4 space-y-4">
-      <h1 className="text-2xl font-bold text-center">Vapi Web SDK Demo</h1>
+      <h1 className="text-2xl font-bold text-center">Claire Core Demo</h1>
 
       {/* Controls */}
       <div className="flex justify-center items-center space-x-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
