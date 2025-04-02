@@ -2,16 +2,24 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
+import Link from 'next/link';
 
 // Define interfaces for the API response
 interface ApiResult {
-  toolCallId: string;
+  tool_call_id?: string;
+  toolCallId?: string;
+  status?: string;
+  message?: string;
   result?: string;
   error?: string;
 }
 
 interface ApiResponse {
-  results: ApiResult[];
+  results?: ApiResult[];
+  tool_call_id?: string;
+  status?: string;
+  message?: string;
+  error?: string;
 }
 
 interface Appointment {
@@ -25,13 +33,23 @@ interface Appointment {
 }
 
 export default function CheckAvailability() {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('09:00');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [rawData, setRawData] = useState<ApiResponse | null>(null);
   const [currentAppointments, setCurrentAppointments] = useState<Appointment[]>([]);
+
+  // Available time slots (30-minute intervals)
+  const timeSlots = [
+    '00:00', '00:30', '01:00', '01:30', '02:00', '02:30', '03:00', '03:30', 
+    '04:00', '04:30', '05:00', '05:30', '06:00', '06:30', '07:00', '07:30', 
+    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
+    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', 
+    '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00', '23:30'
+  ];
 
   // Fetch current appointments on component mount
   useEffect(() => {
@@ -42,14 +60,6 @@ export default function CheckAvailability() {
         setCurrentAppointments(response.data);
       } catch (err) {
         console.error('Error fetching appointments:', err);
-        if (axios.isAxiosError(err)) {
-          console.log('Error details:', {
-            status: err.response?.status,
-            statusText: err.response?.statusText,
-            data: err.response?.data,
-            headers: err.response?.headers
-          });
-        }
       }
     };
     fetchAppointments();
@@ -63,36 +73,55 @@ export default function CheckAvailability() {
     setRawData(null);
 
     try {
+      // Combine date and time into ISO format
+      const startDate = new Date(`${date}T${time}`).toISOString();
+      
       // Create payload for the API
       const payload = {
-        startDate,
-        endDate
+        tool_call_id: "check-from-ui",
+        parameters: {
+          startDate
+        }
       };
 
-      // Make API call to the live URL
+      console.log('Sending payload:', payload);
+
+      // Make API call to the local endpoint for faster development testing
+      const apiUrl = window.location.hostname === 'localhost' 
+        ? 'http://localhost:3000/api/claire/check-availability'
+        : 'https://claire-core.vercel.app/api/claire/check-availability';
+        
       const response = await axios.post(
-        'https://claire-core.vercel.app/api/claire/check-availability',
+        apiUrl,
         payload,
         {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-          withCredentials: false,
-          timeout: 10000,
-          validateStatus: (status) => status < 500
+          timeout: 10000
         }
       );
 
       // Handle response
+      console.log('API response:', response.data);
       setRawData(response.data);
       
-      if (response.status === 200 && response.data?.results?.[0]?.result) {
-        setResult(response.data.results[0].result);
-      } else if (response.data?.results?.[0]?.error) {
-        setError(response.data.results[0].error);
+      if (response.status === 200) {
+        if (response.data.message) {
+          // New API format
+          setResult(response.data.message);
+        } else if (response.data.results?.[0]?.result) {
+          // Old API format
+          setResult(response.data.results[0].result);
+        } else if (response.data.error || response.data.results?.[0]?.error) {
+          // Error format
+          setError(response.data.error || response.data.results?.[0]?.error || 'Unknown error');
+        } else {
+          setError("No clear result found in the response");
+        }
       } else {
-        setError("No clear result found in the response");
+        setError(`Unexpected response status: ${response.status}`);
       }
     } catch (err) {
       console.error('Error checking availability:', err);
@@ -102,12 +131,6 @@ export default function CheckAvailability() {
                            err.message;
         setError(`Failed to check availability: ${errorMessage}`);
         setRawData(err.response?.data || null);
-        console.log('Error details:', {
-          status: err.response?.status,
-          statusText: err.response?.statusText,
-          data: err.response?.data,
-          headers: err.response?.headers
-        });
       } else {
         setError('Failed to check availability. Please try again.');
       }
@@ -123,12 +146,12 @@ export default function CheckAvailability() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left column - Input */}
         <div className="bg-white p-4 rounded shadow">
-          <h2 className="text-lg font-semibold mb-4">Enter Date Range</h2>
+          <h2 className="text-lg font-semibold mb-4">Enter Date and Time</h2>
           
           <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-blue-700">
-            <p className="font-semibold">Appointment Constraints:</p>
+            <p className="font-semibold">Appointment Information:</p>
             <ul className="list-disc list-inside mt-1 text-sm">
-              <li>Business hours: 24/7 - ANY day, ANY time (for demo purposes)</li>
+              <li>Hours: 24/7 - ANY day, ANY time (for demo purposes)</li>
               <li>Appointments are scheduled in 30-minute slots</li>
               <li>All times are displayed in your local timezone</li>
             </ul>
@@ -136,30 +159,29 @@ export default function CheckAvailability() {
           
           <form onSubmit={handleCheck} className="space-y-4">
             <div>
-              <label htmlFor="startDate" className="block mb-1">
-                Start Date (ISO format)
-              </label>
+              <label htmlFor="date" className="block mb-1">Date</label>
               <input
-                id="startDate"
-                type="text"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                id="date"
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
                 className="w-full p-2 border rounded"
-                placeholder="2025-04-02T03:30:00.000Z"
+                required
               />
             </div>
             <div>
-              <label htmlFor="endDate" className="block mb-1">
-                End Date (ISO format)
-              </label>
-              <input
-                id="endDate"
-                type="text"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+              <label htmlFor="time" className="block mb-1">Time</label>
+              <select
+                id="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
                 className="w-full p-2 border rounded"
-                placeholder="2025-04-02T04:00:00.000Z"
-              />
+                required
+              >
+                {timeSlots.map(slot => (
+                  <option key={slot} value={slot}>{slot}</option>
+                ))}
+              </select>
             </div>
             <button
               type="submit"
@@ -173,6 +195,13 @@ export default function CheckAvailability() {
               {loading ? 'Checking...' : 'Check Availability'}
             </button>
           </form>
+          
+          <div className="mt-4">
+            <p className="text-xs text-gray-500">
+              Selected date and time in ISO format: 
+              {date && time ? new Date(`${date}T${time}`).toISOString() : 'None selected'}
+            </p>
+          </div>
         </div>
         
         {/* Right column - Results */}
@@ -192,7 +221,7 @@ export default function CheckAvailability() {
           )}
           
           {!error && !result && !loading && (
-            <p className="text-gray-500">Enter a date range to check availability</p>
+            <p className="text-gray-500">Select a date and time to check availability</p>
           )}
           
           {loading && <p className="text-blue-500">Checking availability...</p>}
@@ -229,17 +258,7 @@ export default function CheckAvailability() {
                   {currentAppointments.map((appointment) => (
                     <tr key={appointment.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(appointment.date).toLocaleString('en-US', {
-                          timeZone: 'America/Chicago',
-                          year: 'numeric',
-                          month: '2-digit',
-                          day: '2-digit',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                          hour12: false
-                        })}
-                        <span className="text-xs text-gray-500 ml-2">(CT)</span>
+                        {new Date(appointment.date).toLocaleString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {appointment.patient.firstName} {appointment.patient.lastName}
@@ -264,17 +283,29 @@ export default function CheckAvailability() {
         ) : (
           <div>
             <p className="text-gray-500 mb-4">No appointments found</p>
-            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
-              <p>Debug Information:</p>
-              <ul className="list-disc list-inside mt-2">
-                <li>API Endpoint: https://claire-core.vercel.app/api/appointments</li>
-                <li>Response Status: {currentAppointments ? '200' : 'No response'}</li>
-                <li>Data Type: {Array.isArray(currentAppointments) ? 'Array' : typeof currentAppointments}</li>
-                <li>Data Length: {Array.isArray(currentAppointments) ? currentAppointments.length : 'N/A'}</li>
-              </ul>
-            </div>
+            <a 
+              href="/calendar"
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Go to Calendar to Add Appointments
+            </a>
           </div>
         )}
+      </div>
+      
+      <div className="mt-8 flex justify-between">
+        <Link 
+          href="/"
+          className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+        >
+          Dashboard
+        </Link>
+        <a 
+          href="/calendar"
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Manage Appointments
+        </a>
       </div>
     </div>
   );

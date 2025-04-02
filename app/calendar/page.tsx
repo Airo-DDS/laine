@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 
 // Define types
 type Appointment = {
@@ -39,6 +38,20 @@ type Patient = {
   phoneNumber?: string;
 };
 
+// Define appointment data coming from API
+interface AppointmentData {
+  id: string;
+  date: string;
+  reason: string;
+  patientType: 'NEW' | 'EXISTING';
+  status: 'SCHEDULED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+  notes?: string;
+  patient: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
 const CalendarPage = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -58,8 +71,6 @@ const CalendarPage = () => {
     newPatientPhone: '',
   });
   
-  const router = useRouter();
-
   // Time slots for the entire day with 30-minute intervals (24/7 for demo)
   const timeSlots = [
     '00:00', '00:30', '01:00', '01:30', '02:00', '02:30', '03:00', '03:30', 
@@ -84,10 +95,17 @@ const CalendarPage = () => {
         const appointmentsData = await appointmentsRes.json();
         const patientsData = await patientsRes.json();
         
-        setAppointments(appointmentsData);
+        // Add parsing of appointment dates here, since they come as strings from the API
+        const parsedAppointments = appointmentsData.map((apt: AppointmentData) => ({
+          ...apt,
+          date: new Date(apt.date)
+        }));
+        
+        setAppointments(parsedAppointments);
         setPatients(patientsData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
+        console.error('Error fetching data:', err);
       } finally {
         setLoading(false);
       }
@@ -109,13 +127,6 @@ const CalendarPage = () => {
     try {
       // Combine date and time
       const dateTime = new Date(`${formData.date}T${formData.time}`);
-      
-      // Remove weekend check for demo purposes
-      // const day = dateTime.getDay();
-      // if (day === 0 || day === 6) {
-      //   setError("Appointments can only be scheduled Monday through Friday.");
-      //   return;
-      // }
       
       let patientId = formData.patientId;
       
@@ -156,11 +167,15 @@ const CalendarPage = () => {
         
         const newPatient = await patientRes.json();
         patientId = newPatient.id;
+        
+        // Add the new patient to the local state
+        setPatients(prev => [...prev, newPatient]);
       } else if (!formData.patientId) {
         setError('Please select a patient');
         return;
       }
       
+      // Create the appointment
       const response = await fetch('/api/appointments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -178,9 +193,13 @@ const CalendarPage = () => {
         throw new Error(errorData.error || 'Failed to create appointment');
       }
       
-      // Close form and refresh data
+      // Get the new appointment data and add it to the local state
+      const newAppointment = await response.json();
+      setAppointments(prev => [...prev, { ...newAppointment, date: new Date(newAppointment.date) }]);
+      
+      // Close form and reset
       setIsFormOpen(false);
-      router.refresh();
+      setError(null);
       
       // Reset form data
       setFormData({
@@ -196,13 +215,9 @@ const CalendarPage = () => {
         newPatientPhone: '',
       });
       
-      // Fetch updated appointments
-      const refreshResponse = await fetch('/api/appointments');
-      const updatedAppointments = await refreshResponse.json();
-      setAppointments(updatedAppointments);
-      
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Error creating appointment:', err);
     }
   };
   
@@ -223,15 +238,17 @@ const CalendarPage = () => {
       
       // Update local state
       setAppointments(prev => prev.filter(apt => apt.id !== id));
+      setError(null);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
+      console.error('Error deleting appointment:', err);
     }
   };
   
   // Group appointments by day
   const appointmentsByDay = appointments.reduce((acc, appointment) => {
-    const day = new Date(appointment.date).toISOString().split('T')[0];
+    const day = appointment.date.toISOString().split('T')[0];
     if (!acc[day]) {
       acc[day] = [];
     }
@@ -241,10 +258,6 @@ const CalendarPage = () => {
   
   if (loading) {
     return <div className="flex justify-center p-8">Loading calendar...</div>;
-  }
-  
-  if (error) {
-    return <div className="p-8 text-red-600">Error: {error}</div>;
   }
 
   return (
@@ -265,8 +278,20 @@ const CalendarPage = () => {
           >
             View Patients
           </a>
+          <a 
+            href="/check-availability"
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Check Availability
+          </a>
         </div>
       </div>
+      
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6">
+          <p>{error}</p>
+        </div>
+      )}
       
       {/* Appointment Form */}
       {isFormOpen && (
@@ -275,9 +300,8 @@ const CalendarPage = () => {
             <h2 className="text-xl font-bold mb-4">New Appointment</h2>
             
             <div className="mb-4 p-4 bg-blue-50 rounded shadow-sm">
-              <h3 className="font-semibold text-blue-800 mb-2">Appointment Restrictions</h3>
-              <p className="font-medium text-sm mb-2">Appointment Restrictions:</p>
-              <ul className="list-disc list-inside text-xs pl-2">
+              <h3 className="font-semibold text-blue-800 mb-2">Appointment Information</h3>
+              <ul className="list-disc list-inside text-sm pl-2">
                 <li className="mb-1">Hours: 24/7 - ANY day, ANY time (for demo purposes)</li>
                 <li className="mb-1">Appointments are scheduled in 30-minute slots</li>
                 <li>All times are displayed in your local timezone</li>
@@ -468,22 +492,17 @@ const CalendarPage = () => {
               
               <div className="divide-y">
                 {dayAppointments
-                  .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                  .sort((a, b) => a.date.getTime() - b.date.getTime())
                   .map(appointment => (
                     <div key={appointment.id} className="p-4 flex justify-between items-start">
                       <div>
                         <div className="flex items-center">
                           <span className="font-medium">
-                            {new Date(appointment.date).toLocaleString('en-US', {
-                              timeZone: 'America/Chicago',
-                              weekday: 'long',
-                              year: 'numeric',
-                              month: 'long',
-                              day: 'numeric',
+                            {appointment.date.toLocaleString('en-US', {
                               hour: '2-digit',
                               minute: '2-digit',
                               hour12: true
-                            })} (CT)
+                            })}
                           </span>
                           <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
                             appointment.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :
