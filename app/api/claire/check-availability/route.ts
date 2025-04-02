@@ -479,6 +479,10 @@ export async function POST(request: Request) {
     if (startDate) startDate = normalizeDateString(startDate);
     if (endDate) endDate = normalizeDateString(endDate);
 
+    // After extracting startDate and endDate, add these lines:
+    const startDateObj = startDate ? new Date(startDate) : new Date();
+    const endDateObj = endDate ? new Date(endDate) : new Date();
+
     if (startDate && endDate) {
       const startObj = new Date(startDate);
       const endObj = new Date(endDate);
@@ -584,27 +588,26 @@ export async function POST(request: Request) {
     });
 
     // Prepare system instructions for GPT
-    const systemPrompt = `You are an AI assistant for a dental practice that checks appointment availability. 
-The practice is open Monday-Friday from 9:00 AM to 5:00 PM, with appointments scheduled every 30 minutes.
-Today's date is ${new Date().toLocaleDateString()}.
+    const systemPrompt = `You are an AI assistant for a dental practice that checks appointment availability.
+    The practice is open Monday-Friday from 9:00 AM to 5:00 PM Central Time (Oklahoma, UTC-5), with appointments scheduled every 30 minutes.
+    Today's date is ${new Date().toLocaleDateString()}.
 
-Here are the currently booked appointments:
-${JSON.stringify(appointmentsFormatted, null, 2)}
+    The user has SPECIFICALLY REQUESTED: ${startDateObj.toISOString()} (${startDateObj.toLocaleString('en-US', {timeZone: 'America/Chicago'})})
 
-Here are the available appointment slots:
-${JSON.stringify(availableSlotsFormatted.slice(0, 20), null, 2)}
-${availableSlotsFormatted.length > 20 ? `... and ${availableSlotsFormatted.length - 20} more slots` : ''}
+    Here are the currently booked appointments:
+    ${JSON.stringify(appointmentsFormatted, null, 2)}
 
-When responding about availability:
-1. Always directly address the specific date and time the person asked about if mentioned.
-2. If they requested a specific time (like "1:30 PM on April 3rd"), check if that exact time is available first.
-3. If a requested time is unavailable, offer 2-3 alternatives nearby.
-4. For date ranges, show 2-3 available times for each of the next 3 available days.
-5. Format times in a natural, easy-to-understand way (e.g., "1:30 PM on Thursday, April 3rd").
-6. Only show available slots (not booked appointments).
-7. End your response by asking if any of the times work for them.
+    Here are the available appointment slots:
+    ${JSON.stringify(availableSlotsFormatted.slice(0, 20), null, 2)}
+    ${availableSlotsFormatted.length > 20 ? `... and ${availableSlotsFormatted.length - 20} more slots` : ''}
 
-Respond conversationally but concisely.`;
+    IMPORTANT: Provide a DIRECT answer about whether the SPECIFIC requested time (${startDateObj.toLocaleString('en-US', {timeZone: 'America/Chicago'})}) is available.
+
+    If the requested time IS available, say: "Yes, the appointment slot at [TIME] on [DATE] is available. Would you like to schedule it?"
+
+    If the requested time is NOT available, say: "I'm sorry, the [TIME] on [DATE] is already booked. Here are 2-3 alternative times nearby: [LIST ALTERNATIVES]"
+
+    Make your response clear, conversational, and focused on the specific time requested.`;
 
     // Combine user message and date context for better understanding
     const userQuery = userMessage 
