@@ -28,6 +28,24 @@ interface CheckAvailabilityParams {
   endDate: string;
 }
 
+// Parameters from various sources might use different naming conventions
+interface RawParameters {
+  startDate?: string;
+  endDate?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  [key: string]: string | undefined;
+}
+
+// Backward compatibility adapter for dateFrom/dateTo parameters
+function adaptParameters(params: RawParameters): CheckAvailabilityParams {
+  // Handle both naming conventions
+  return {
+    startDate: params.startDate || params.dateFrom || '',
+    endDate: params.endDate || params.dateTo || ''
+  };
+}
+
 // Define standard appointment slots (30 minutes each, from 9am to 5pm)
 const APPOINTMENT_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
@@ -107,7 +125,9 @@ export async function POST(request: Request) {
       }
       
       try {
-        functionParams = JSON.parse(toolCall.function.arguments);
+        const parsedParams = JSON.parse(toolCall.function.arguments);
+        // Apply parameter adapter
+        functionParams = adaptParameters(parsedParams);
       } catch (e) {
         return NextResponse.json(
           {
@@ -140,7 +160,9 @@ export async function POST(request: Request) {
       }
       
       try {
-        functionParams = JSON.parse(body.message.functionCall.parameters);
+        const parsedParams = JSON.parse(body.message.functionCall.parameters);
+        // Apply parameter adapter
+        functionParams = adaptParameters(parsedParams);
       } catch (e) {
         return NextResponse.json(
           {

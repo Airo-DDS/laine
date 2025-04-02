@@ -27,16 +27,16 @@ async function main() {
         parameters: {
           type: "object",
           properties: {
-            dateFrom: {
+            startDate: {
               type: "string",
               description: "The start date and time in ISO 8601 format (e.g., 2024-07-30T09:00:00Z) for the availability check range. Infer this from the user query."
             },
-            dateTo: {
+            endDate: {
               type: "string",
               description: "The end date and time in ISO 8601 format (e.g., 2024-07-30T17:00:00Z) for the availability check range. Infer this from the user query."
             }
           },
-          required: ["dateFrom", "dateTo"]
+          required: ["startDate", "endDate"]
         }
       },
       server: {
