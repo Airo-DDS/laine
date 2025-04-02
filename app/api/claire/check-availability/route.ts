@@ -18,7 +18,7 @@ interface VapiToolCallWebhook {
     };
     functionCall?: {
       name: string;
-      parameters: string; // JSON string containing parameters (older format)
+      parameters: Record<string, unknown> | string; // JSON object or string containing parameters
     };
   };
 }
@@ -28,13 +28,12 @@ interface CheckAvailabilityParams {
   endDate: string;
 }
 
-// Parameters from various sources might use different naming conventions
+// For backward compatibility
 interface RawParameters {
   startDate?: string;
   endDate?: string;
   dateFrom?: string;
   dateTo?: string;
-  [key: string]: string | undefined;
 }
 
 // Backward compatibility adapter for dateFrom/dateTo parameters
@@ -59,20 +58,64 @@ function isBusinessDay(date: Date): boolean {
   return day !== 0 && day !== 6; // 0 = Sunday, 6 = Saturday
 }
 
-// Generate available slots based on a date range
-function generateAvailableSlots(startDate: Date, endDate: Date): string[] {
-  const slots: string[] = [];
-  const currentDate = new Date(startDate);
+// Format date for response
+function formatDate(isoString: string): string {
+  const date = new Date(isoString);
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric'
+  }).format(date);
+}
+
+// Generate all possible slots for a date range
+async function findAvailableSlots(startDate: Date, endDate: Date): Promise<string[]> {
+  // Ensure we're working with dates with zeroed-out time components
+  const startDateCopy = new Date(startDate);
+  startDateCopy.setHours(0, 0, 0, 0);
+  
+  const endDateCopy = new Date(endDate);
+  endDateCopy.setHours(23, 59, 59, 999);
+  
+  // Get all appointments within the date range
+  const existingAppointments = await prisma.appointment.findMany({
+    where: {
+      date: {
+        gte: startDateCopy,
+        lte: endDateCopy
+      },
+      status: {
+        in: ['SCHEDULED', 'CONFIRMED'] // Only consider active appointments
+      }
+    },
+    select: {
+      date: true
+    }
+  });
+  
+  // Create a map of booked slots
+  const bookedSlots = new Set(
+    existingAppointments.map(apt => apt.date.toISOString())
+  );
+  
+  const availableSlots: string[] = [];
+  const currentDate = new Date(startDateCopy);
   
   // Loop through each day in the range
-  while (currentDate <= endDate) {
+  while (currentDate <= endDateCopy) {
     // Only include business days
     if (isBusinessDay(currentDate)) {
       const dateStr = currentDate.toISOString().split('T')[0];
       
       // Add each time slot for the day
-      for (const slot of APPOINTMENT_SLOTS) {
-        slots.push(`${dateStr}T${slot}:00`);
+      for (const timeSlot of APPOINTMENT_SLOTS) {
+        const slotDateTime = new Date(`${dateStr}T${timeSlot}:00`);
+        const slotISOString = slotDateTime.toISOString();
+        
+        // Check if this slot is available
+        if (!bookedSlots.has(slotISOString)) {
+          availableSlots.push(slotISOString);
+        }
       }
     }
     
@@ -80,7 +123,65 @@ function generateAvailableSlots(startDate: Date, endDate: Date): string[] {
     currentDate.setDate(currentDate.getDate() + 1);
   }
   
-  return slots;
+  return availableSlots;
+}
+
+// Format the available slots into a human-readable response
+function formatAvailabilityResponse(availableSlots: string[]): string {
+  if (availableSlots.length === 0) {
+    return "I'm sorry, but there are no appointment slots available in the requested timeframe. Would you like to try a different date range?";
+  }
+  
+  // Group slots by date
+  const slotsByDate: Record<string, string[]> = {};
+  for (const slot of availableSlots) {
+    const date = slot.split('T')[0];
+    if (!slotsByDate[date]) {
+      slotsByDate[date] = [];
+    }
+    slotsByDate[date].push(slot);
+  }
+  
+  // Sort dates
+  const sortedDates = Object.keys(slotsByDate).sort();
+  
+  // Limit to first 3 days with availability
+  const selectedDates = sortedDates.slice(0, 3);
+  
+  // Generate response text
+  let response = "We have several appointment slots available. ";
+  
+  selectedDates.forEach((date, dateIndex) => {
+    // Format date
+    const dateObj = new Date(date);
+    const formattedDate = formatDate(dateObj.toISOString());
+    
+    response += `On ${formattedDate}, we have: `;
+    
+    // Limit to 3 times per day for readability
+    const timesForDate = slotsByDate[date]
+      .slice(0, 3)
+      .map(slot => {
+        const timeObj = new Date(slot);
+        return new Intl.DateTimeFormat('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }).format(timeObj);
+      });
+    
+    response += timesForDate.join(', ');
+    
+    if (dateIndex < selectedDates.length - 1) {
+      response += '; ';
+    } else {
+      response += '. ';
+    }
+  });
+  
+  response += "Would any of these times work for you?";
+  
+  return response;
 }
 
 export async function POST(request: Request) {
@@ -104,13 +205,13 @@ export async function POST(request: Request) {
     let toolCallId: string | undefined;
     let functionParams: CheckAvailabilityParams | undefined;
     
-    // Handle both old and new VAPI webhook formats
+    // Handle VAPI webhook format
     if (body.message?.toolCallList && body.message.toolCallList.length > 0) {
       // New format
       const toolCall = body.message.toolCallList[0];
       toolCallId = toolCall.id;
       
-      if (toolCall.function?.name !== 'checkAvailability') {
+      if (toolCall.function?.name !== 'check_availability' && toolCall.function?.name !== 'checkAvailability') {
         return NextResponse.json(
           {
             results: [
@@ -142,10 +243,10 @@ export async function POST(request: Request) {
         );
       }
     } else if (body.message?.functionCall) {
-      // Old format
+      // Legacy format - support for backward compatibility
       toolCallId = body.message?.call?.id;
       
-      if (body.message.functionCall.name !== 'checkAvailability') {
+      if (body.message.functionCall.name !== 'check_availability' && body.message.functionCall.name !== 'checkAvailability') {
         return NextResponse.json(
           {
             results: [
@@ -160,7 +261,12 @@ export async function POST(request: Request) {
       }
       
       try {
-        const parsedParams = JSON.parse(body.message.functionCall.parameters);
+        let parsedParams: RawParameters;
+        if (typeof body.message.functionCall.parameters === 'string') {
+          parsedParams = JSON.parse(body.message.functionCall.parameters);
+        } else {
+          parsedParams = body.message.functionCall.parameters as RawParameters;
+        }
         // Apply parameter adapter
         functionParams = adaptParameters(parsedParams);
       } catch (e) {
@@ -177,10 +283,24 @@ export async function POST(request: Request) {
         );
       }
     } else {
-      return NextResponse.json(
-        { error: 'Invalid request format' },
-        { status: 400 }
-      );
+      // Direct API call format - for debugging and direct testing
+      console.log('Processing direct API call format');
+      toolCallId = 'direct-call'; // Placeholder ID for direct API calls
+      try {
+        functionParams = adaptParameters(body as RawParameters);
+      } catch (e) {
+        return NextResponse.json(
+          {
+            results: [
+              {
+                toolCallId,
+                error: `Failed to parse direct parameters: ${e instanceof Error ? e.message : String(e)}`
+              }
+            ]
+          },
+          { status: 400 }
+        );
+      }
     }
     
     if (!functionParams) {
@@ -233,63 +353,13 @@ export async function POST(request: Request) {
 
     console.log(`Checking availability from ${startDateObj.toISOString()} to ${endDateObj.toISOString()}`);
     
-    // Query the database for booked appointments in the date range
-    const bookedAppointments = await prisma.appointment.findMany({
-      where: {
-        date: {
-          gte: startDateObj,
-          lte: endDateObj
-        },
-        status: {
-          in: ['SCHEDULED', 'CONFIRMED']
-        }
-      },
-      select: {
-        date: true
-      }
-    });
-    
-    // Get the booked times as ISO strings for easy comparison
-    const bookedTimes = bookedAppointments.map(appointment => 
-      appointment.date.toISOString()
-    );
-    
-    // Generate all possible slots in the date range
-    const allSlots = generateAvailableSlots(startDateObj, endDateObj);
-    
-    // Filter out the booked slots
-    const availableSlots = allSlots.filter(slot => 
-      !bookedTimes.includes(new Date(slot).toISOString())
-    );
-    
-    console.log(`Found ${availableSlots.length} available slots out of ${allSlots.length} total slots`);
+    // Find available slots by querying the database
+    const availableSlots = await findAvailableSlots(startDateObj, endDateObj);
     
     // Format the response
-    const formattedSlots = availableSlots.map(slot => {
-      const slotDate = new Date(slot);
-      return slotDate.toLocaleString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true // Use AM/PM
-      });
-    });
+    const responseMessage = formatAvailabilityResponse(availableSlots);
     
-    // Build a response message based on availability
-    let responseMessage: string;
-    
-    if (availableSlots.length === 0) {
-      responseMessage = `I'm sorry, but we don't have any available appointment slots between ${startDate} and ${endDate}. Please try a different date range.`;
-    } else if (availableSlots.length <= 5) {
-      // If only a few slots, list them specifically
-      responseMessage = `We have the following appointment slots available between ${startDate} and ${endDate}: ${formattedSlots.join(', ')}. Would you like to book one of these times?`;
-    } else {
-      // If many slots, summarize by days
-      const daysAvailable = [...new Set(availableSlots.map(slot => slot.split('T')[0]))].length;
-      responseMessage = `We have ${availableSlots.length} appointment slots available across ${daysAvailable} days between ${startDate} and ${endDate}. Some available times include: ${formattedSlots.slice(0, 3).join(', ')}. What day and time would work best for you?`;
-    }
+    console.log('Returning response:', responseMessage);
     
     // Return the response in the format expected by VAPI
     return NextResponse.json({
@@ -306,6 +376,7 @@ export async function POST(request: Request) {
       {
         results: [
           {
+            toolCallId: error instanceof Error && 'id' in error ? (error as unknown as { id: string }).id : 'error',
             error: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
           }
         ]
