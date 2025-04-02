@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     }
 
     // Parse the request body
-    const body = await request.json() as VapiToolCall | { startDate: string; endDate: string };
+    const body = await request.json();
     console.log('Received request body:', JSON.stringify(body, null, 2));
 
     // Extract toolCallId and parameters
@@ -186,15 +186,20 @@ export async function POST(request: Request) {
     if ('id' in body) {
       // Handle VAPI tool call format
       toolCallId = body.id;
+      console.log('Processing VAPI tool call with ID:', toolCallId);
       
       // Parse parameters from function arguments
       if (typeof body.function?.arguments === 'string') {
+        console.log('Parsing function arguments:', body.function.arguments);
         const args = JSON.parse(body.function.arguments) as { startDate: string; endDate: string };
         startDate = args.startDate;
         endDate = args.endDate;
+        console.log('Parsed dates:', { startDate, endDate });
       } else if (body.function?.parameters) {
+        console.log('Using direct parameters');
         const params = body.function.parameters;
         if (!params.startDate || !params.endDate) {
+          console.log('Missing required parameters');
           return NextResponse.json({
             results: [{
               toolCallId,
@@ -204,7 +209,9 @@ export async function POST(request: Request) {
         }
         startDate = params.startDate;
         endDate = params.endDate;
+        console.log('Using parameters:', { startDate, endDate });
       } else {
+        console.log('No valid parameters found in request');
         return NextResponse.json({
           results: [{
             toolCallId,
@@ -214,6 +221,7 @@ export async function POST(request: Request) {
       }
     } else {
       // Handle direct API call format
+      console.log('Processing direct API call');
       toolCallId = 'direct-call';
       startDate = body.startDate;
       endDate = body.endDate;
@@ -221,6 +229,7 @@ export async function POST(request: Request) {
 
     // Validate required parameters
     if (!startDate || !endDate) {
+      console.log('Missing required parameters');
       return NextResponse.json({
         results: [{
           toolCallId,
@@ -232,8 +241,9 @@ export async function POST(request: Request) {
     // Parse dates
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
-
+    
     if (Number.isNaN(startDateObj.getTime()) || Number.isNaN(endDateObj.getTime())) {
+      console.log('Invalid date format:', { startDate, endDate });
       return NextResponse.json({
         results: [{
           toolCallId,
@@ -242,19 +252,29 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    console.log('Checking availability for range:', {
+      start: startDateObj.toISOString(),
+      end: endDateObj.toISOString()
+    });
+
     // Find available slots
     const availableSlots = await findAvailableSlots(startDateObj, endDateObj);
+    console.log('Found available slots:', availableSlots.length);
     
     // Format the response
     const responseMessage = formatAvailabilityResponse(availableSlots);
+    console.log('Formatted response:', responseMessage);
 
     // Return in VAPI tool call response format
-    return NextResponse.json({
+    const response = {
       results: [{
         toolCallId,
         result: responseMessage
       }]
-    });
+    };
+    console.log('Sending response:', JSON.stringify(response, null, 2));
+    
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('Error processing request:', error);
