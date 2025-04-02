@@ -69,27 +69,6 @@ interface VapiToolCall {
   }>;
 }
 
-// New VAPI Message structure that matches the incoming payload
-interface VapiMessage {
-  message?: {
-    timestamp?: number;
-    type?: string;
-    toolCalls?: VapiToolCall[];
-    toolCallList?: VapiToolCall[];
-    toolWithToolCallList?: Array<{
-      type?: string;
-      function?: Record<string, unknown>;
-      async?: boolean;
-      server?: Record<string, unknown>;
-      messages?: unknown[];
-      toolCall?: VapiToolCall;
-    }>;
-    artifact?: Record<string, unknown>;
-    call?: Record<string, unknown>;
-    assistant?: Record<string, unknown>;
-  };
-}
-
 // Define standard appointment slots (30 minutes each, from 9am to 5pm)
 const APPOINTMENT_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
