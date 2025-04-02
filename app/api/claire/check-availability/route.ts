@@ -151,9 +151,10 @@ export async function POST(request: Request) {
       log('No start date provided in request');
       return NextResponse.json(
         { 
-          tool_call_id: toolCallId,
-          status: 'error',
-          message: 'Start date is required'
+          results: [{
+            toolCallId: toolCallId,
+            result: 'Start date is required'
+          }]
         }, 
         { 
           status: 400,
@@ -254,12 +255,8 @@ export async function POST(request: Request) {
       message = `Yes ${formattedTime} is available`;
     }
     
-    // Format response according to Vapi docs
+    // Format response according to Vapi docs - simplified to exactly match the docs
     const response = {
-      tool_call_id: toolCallId,
-      status: 'success',
-      message,
-      // Also include results array format as per docs
       results: [{
         toolCallId: toolCallId,
         result: message
@@ -267,7 +264,7 @@ export async function POST(request: Request) {
     };
     
     // Return the result
-    log('Sending response', { available: !conflictingAppointment, message });
+    log('Sending response', { available: !conflictingAppointment, message, response });
     return NextResponse.json(
       response,
       { headers: corsHeaders }
@@ -282,10 +279,6 @@ export async function POST(request: Request) {
     
     return NextResponse.json(
       {
-        tool_call_id: toolCallId,
-        status: 'error',
-        message: errorMessage,
-        // Also include results array format as per docs
         results: [{
           toolCallId: toolCallId,
           result: errorMessage
