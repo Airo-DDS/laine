@@ -588,26 +588,83 @@ export async function POST(request: Request) {
     });
 
     // Prepare system instructions for GPT
-    const systemPrompt = `You are an AI assistant for a dental practice that checks appointment availability.
-    The practice is open Monday-Friday from 9:00 AM to 5:00 PM Central Time (Oklahoma, UTC-5), with appointments scheduled every 30 minutes.
-    Today's date is ${new Date().toLocaleDateString()}.
+    const systemPrompt = `You are a dental appointment scheduling assistant.
 
-    The user has SPECIFICALLY REQUESTED: ${startDateObj.toISOString()} (${startDateObj.toLocaleString('en-US', {timeZone: 'America/Chicago'})})
+YOUR ONLY JOB is to tell the user whether their requested appointment time is available or not.
 
-    Here are the currently booked appointments:
-    ${JSON.stringify(appointmentsFormatted, null, 2)}
+CRITICAL INFORMATION:
+- Practice hours: Monday-Friday, 9:00 AM - 5:00 PM Central Time (Oklahoma, UTC-5)
+- Appointments are 30 minutes each
+- Today's date: ${new Date().toLocaleDateString()}
+- User has REQUESTED APPOINTMENT TIME: ${startDateObj.toLocaleString('en-US', {
+  timeZone: 'America/Chicago',
+  weekday: 'long',
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: 'numeric',
+  hour12: true
+})}
 
-    Here are the available appointment slots:
-    ${JSON.stringify(availableSlotsFormatted.slice(0, 20), null, 2)}
-    ${availableSlotsFormatted.length > 20 ? `... and ${availableSlotsFormatted.length - 20} more slots` : ''}
+BOOKED APPOINTMENTS:
+${JSON.stringify(appointmentsFormatted, null, 2)}
 
-    IMPORTANT: Provide a DIRECT answer about whether the SPECIFIC requested time (${startDateObj.toLocaleString('en-US', {timeZone: 'America/Chicago'})}) is available.
+AVAILABLE SLOTS:
+${JSON.stringify(availableSlotsFormatted.slice(0, 10), null, 2)}
+${availableSlotsFormatted.length > 10 ? `... and ${availableSlotsFormatted.length - 10} more slots` : ''}
 
-    If the requested time IS available, say: "Yes, the appointment slot at [TIME] on [DATE] is available. Would you like to schedule it?"
+YOU MUST follow these instructions EXACTLY:
 
-    If the requested time is NOT available, say: "I'm sorry, the [TIME] on [DATE] is already booked. Here are 2-3 alternative times nearby: [LIST ALTERNATIVES]"
+1. DO NOT ask the user for a date or time - they already provided it
+2. Check if the requested time (${startDateObj.toLocaleString('en-US', {
+  timeZone: 'America/Chicago',
+  hour: 'numeric',
+  minute: 'numeric',
+  hour12: true
+})} on ${startDateObj.toLocaleString('en-US', {
+  timeZone: 'America/Chicago',
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric'
+})}) is in the available slots list
 
-    Make your response clear, conversational, and focused on the specific time requested.`;
+3. RESPOND USING EXACTLY ONE OF THESE TEMPLATES:
+   - IF AVAILABLE: "Yes, I can confirm your appointment slot for ${startDateObj.toLocaleString('en-US', {
+       timeZone: 'America/Chicago',
+       hour: 'numeric',
+       minute: 'numeric',
+       hour12: true
+     })} on ${startDateObj.toLocaleString('en-US', {
+       timeZone: 'America/Chicago',
+       weekday: 'long',
+       month: 'long',
+       day: 'numeric',
+       year: 'numeric'
+     })} is available. Would you like to schedule it?"
+   
+   - IF NOT AVAILABLE: "I'm sorry, but ${startDateObj.toLocaleString('en-US', {
+       timeZone: 'America/Chicago',
+       hour: 'numeric',
+       minute: 'numeric',
+       hour12: true
+     })} on ${startDateObj.toLocaleString('en-US', {
+       timeZone: 'America/Chicago',
+       weekday: 'long',
+       month: 'long',
+       day: 'numeric',
+       year: 'numeric'
+     })} is not available. Here are some alternative times available that day: [LIST 2-3 ACTUAL ALTERNATIVES]"
+
+DO NOT deviate from these exact response formats. DO NOT ask for more information about dates or times.`;
+
+    // OpenAI configuration for more reliable responses
+    const openAIConfig = {
+      temperature: 0, // Maximum determinism
+      maxTokens: 150, // Enough for the response but not too much freedom
+      topP: 0.1, // Focus on the most likely tokens
+    };
 
     // Combine user message and date context for better understanding
     const userQuery = userMessage 
@@ -615,33 +672,52 @@ export async function POST(request: Request) {
       : dateContext || "The user is checking appointment availability";
 
     // Use AI SDK to generate a response
-    logDebug('Sending request to AI', { systemPrompt, userQuery });
+    logDebug('Sending request to AI', { systemPrompt, userQuery, config: openAIConfig });
     
-    const result = await generateText({
-      model: openai('gpt-4o-mini'),
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userQuery }],
-    });
-    
-    logDebug('Received AI response', { aiResponse: result });
+    try {
+      const result = await generateText({
+        model: openai('gpt-4o-mini'),
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userQuery }],
+        temperature: openAIConfig.temperature,
+        maxTokens: openAIConfig.maxTokens,
+        topP: openAIConfig.topP
+      });
+      
+      logDebug('Received AI response', { aiResponse: result });
 
-    // Return in VAPI tool call response format
-    const responseObj = {
-      results: [{
-        toolCallId,
-        result: result
-      }]
-    };
-    
-    const responseTime = Date.now() - requestStartTime;
-    logDebug('Sending response', { 
-      responseTime: `${responseTime}ms`,
-      response: responseObj
-    });
-    
-    return NextResponse.json(responseObj, {
-      headers: corsHeaders
-    });
+      // Return in VAPI tool call response format
+      const responseObj = {
+        results: [{
+          toolCallId,
+          result: result
+        }]
+      };
+      
+      const responseTime = Date.now() - requestStartTime;
+      logDebug('Sending response', { 
+        responseTime: `${responseTime}ms`,
+        response: responseObj
+      });
+      
+      return NextResponse.json(responseObj, {
+        headers: corsHeaders
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      logDebug('Error processing AI response', { error: errorMsg, stack: error instanceof Error ? error.stack : 'No stack trace' });
+      
+      // Return error in VAPI tool call response format with CORS headers
+      return NextResponse.json({
+        results: [{
+          toolCallId,
+          error: `Failed to check availability: ${errorMsg}`
+        }]
+      }, { 
+        status: 500,
+        headers: corsHeaders
+      });
+    }
 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
