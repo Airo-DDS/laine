@@ -1,0 +1,31 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# .cursorrules
+
+project:
+  name: "Claire"
+  description: >
+    Claire is an AI-Powered Dental Office Assistant designed to optimize dental practice workflows.
+    It is built to enhance patient interactions and streamline office operations, combining a
+    real-time dashboard, a customizable AI virtual assistant, intelligent call handling, and smart task
+    management into one unified experience.
+
+vision:
+  - "Improve patient communication and engagement in dental practices."
+  - "Empower dental staff with intuitive tools that automate routine tasks."
+  - "Provide a clean, user-centric interface that makes managing dental operations effortless."
+  - "Lay the groundwork for future enhancements like EHR integration and multi-channel messaging."
+
+focus:
+  - "Real-time data and actionable insights on a simplified dashboard."
+  - "A highly customizable AI assistant tailored for dental office workflows."
+  - "Efficient call handling with intelligent transcription and task creation."
+  - "A straightforward, minimal interface that prioritizes clarity and usability."
+
+philosophy:
+  - "User-first design: Build tools that dental professionals love to use."
+  - "Simplicity meets functionality: Keep the interface clean and effective."
+  - "Scalable core: Establish a robust foundation for future features and integrations."
