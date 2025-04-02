@@ -160,17 +160,21 @@ function formatAvailabilityResponse(availableSlots: string[]): string {
   return response;
 }
 
+// Define CORS headers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': 'https://dashboard.vapi.ai',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Credentials': 'true',
+};
+
 export async function POST(request: Request) {
   try {
     // Handle preflight CORS request
     if (request.method === 'OPTIONS') {
       return new NextResponse(null, {
         status: 204,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        },
+        headers: corsHeaders,
       });
     }
 
@@ -267,7 +271,7 @@ export async function POST(request: Request) {
     const responseMessage = formatAvailabilityResponse(availableSlots);
     console.log('Formatted response:', responseMessage);
 
-    // Return in VAPI tool call response format
+    // Return in VAPI tool call response format with CORS headers
     const response = {
       results: [{
         toolCallId,
@@ -276,18 +280,23 @@ export async function POST(request: Request) {
     };
     console.log('Sending response:', JSON.stringify(response, null, 2));
     
-    return NextResponse.json(response);
+    return NextResponse.json(response, {
+      headers: corsHeaders
+    });
 
   } catch (error) {
     console.error('Error processing request:', error);
     
-    // Return error in VAPI tool call response format
+    // Return error in VAPI tool call response format with CORS headers
     return NextResponse.json({
       results: [{
         toolCallId: 'error',
         error: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
       }]
-    }, { status: 500 });
+    }, { 
+      status: 500,
+      headers: corsHeaders
+    });
   } finally {
     await prisma.$disconnect();
   }
@@ -297,10 +306,6 @@ export async function POST(request: Request) {
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
+    headers: corsHeaders,
   });
 } 

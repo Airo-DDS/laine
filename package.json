@@ -32,7 +32,6 @@
     "@vapi-ai/server-sdk": "^0.5.1",
     "@vapi-ai/web": "^2.2.5",
     "ai": "^4.2.10",
-    "axios": "^1.8.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -48,15 +47,17 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
+    "@types/node": "^20.17.30",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "axios": "^1.8.4",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "node-fetch": "^3.3.2",
     "prisma": "^6.5.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.3",
     "typescript": "^5"
   },
   "prisma": {
