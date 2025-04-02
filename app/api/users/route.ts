@@ -1,15 +1,27 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 
-export async function GET() {
+const prismaClient = new PrismaClient()
+
+export async function GET(request: Request) {
   try {
-    const users = await prisma.user.findMany({
+    const { searchParams } = new URL(request.url)
+    const role = searchParams.get('role')
+    
+    // Set up filter
+    const filter = role ? { role } : {}
+    
+    const users = await prismaClient.user.findMany({
+      where: filter,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
-        createdAt: true,
+      },
+      orderBy: {
+        name: 'asc',
       },
     })
     

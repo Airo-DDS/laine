@@ -75,8 +75,10 @@ async function main() {
   const appointment1 = await prisma.appointment.create({
     data: {
       date: tomorrow,
+      reason: 'Regular checkup',
+      patientType: 'EXISTING',
       status: 'CONFIRMED',
-      notes: 'Regular checkup',
+      notes: 'Patient has sensitivity in lower right molar',
       patientId: patient1.id,
     },
   })
@@ -84,13 +86,58 @@ async function main() {
   const appointment2 = await prisma.appointment.create({
     data: {
       date: nextWeek,
+      reason: 'Teeth cleaning',
+      patientType: 'EXISTING',
       status: 'SCHEDULED',
-      notes: 'Follow-up appointment',
+      notes: 'Follow-up appointment after filling',
       patientId: patient2.id,
     },
   })
   
-  console.log('Created appointments:', { appointment1, appointment2 })
+  // Add a few more appointments for the week
+  const dayAfterTomorrow = new Date(today)
+  dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2)
+  
+  const threeDaysFromNow = new Date(today)
+  threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3)
+  
+  const fourDaysFromNow = new Date(today)
+  fourDaysFromNow.setDate(fourDaysFromNow.getDate() + 4)
+  
+  await prisma.appointment.create({
+    data: {
+      date: dayAfterTomorrow,
+      reason: 'New patient consultation',
+      patientType: 'NEW',
+      status: 'CONFIRMED',
+      notes: 'First visit, comprehensive exam needed',
+      patientId: patient1.id,
+    },
+  })
+  
+  await prisma.appointment.create({
+    data: {
+      date: threeDaysFromNow,
+      reason: 'Root canal',
+      patientType: 'EXISTING',
+      status: 'SCHEDULED',
+      notes: 'Patient reported severe pain',
+      patientId: patient2.id,
+    },
+  })
+  
+  await prisma.appointment.create({
+    data: {
+      date: fourDaysFromNow,
+      reason: 'Wisdom tooth extraction',
+      patientType: 'EXISTING',
+      status: 'SCHEDULED',
+      notes: 'X-rays already taken',
+      patientId: patient1.id,
+    },
+  })
+  
+  console.log('Created appointments for the week')
   
   console.log('Database seeding completed.')
 }

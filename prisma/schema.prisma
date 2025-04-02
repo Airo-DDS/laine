@@ -48,10 +48,17 @@ model Patient {
   appointments Appointment[]
 }
 
+enum PatientType {
+  NEW
+  EXISTING
+}
+
 // Appointment model
 model Appointment {
   id          String   @id @default(uuid())
   date        DateTime
+  reason      String
+  patientType PatientType @default(EXISTING)
   status      AppointmentStatus @default(SCHEDULED)
   notes       String?
   createdAt   DateTime @default(now())

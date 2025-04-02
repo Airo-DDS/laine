@@ -1,27 +1,21 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
+import { PrismaClient } from '@prisma/client'
 
+const prisma = new PrismaClient()
+
+// GET all patients
 export async function GET() {
   try {
     const patients = await prisma.patient.findMany({
-      include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-        appointments: {
-          select: {
-            id: true,
-            date: true,
-            status: true,
-          },
-          orderBy: {
-            date: 'desc',
-          },
-          take: 5,
-        },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        phoneNumber: true,
+      },
+      orderBy: {
+        lastName: 'asc',
       },
     })
     

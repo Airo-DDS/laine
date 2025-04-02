@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "DISABLE_ESLINT_PLUGIN=true prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
@@ -13,7 +13,11 @@
     "prisma:migrate:create": "prisma migrate dev --create-only",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "db:seed": "prisma db seed"
+    "db:seed": "prisma db seed",
+    "check-vapi-tools": "ts-node scripts/check-vapi-tools.ts",
+    "setup-vapi-tools": "ts-node scripts/setup-vapi-tools.ts",
+    "seed": "prisma db seed",
+    "setup-vapi": "ts-node scripts/setup-vapi-tools.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
@@ -23,8 +27,11 @@
     "@radix-ui/react-separator": "^1.1.2",
     "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
+    "@vapi-ai/server-sdk": "^0.5.1",
+    "@vapi-ai/web": "^2.2.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
     "lucide-react": "^0.486.0",
     "next": "15.2.4",
     "react": "^19.0.0",
