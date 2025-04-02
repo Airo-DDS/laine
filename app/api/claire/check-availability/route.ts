@@ -197,6 +197,16 @@ export async function POST(request: Request) {
     
     log('Retrieved appointments', { count: appointments.length });
     
+    // Format the requested time for display
+    const formattedTime = requestedTime.toLocaleString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true
+    });
+    
     // Find if there's a conflicting appointment
     const conflictingAppointment = appointments.find(appointment => {
       const appointmentTime = new Date(appointment.date);
@@ -213,6 +223,9 @@ export async function POST(request: Request) {
       const nextDay = new Date(baseTime);
       nextDay.setDate(nextDay.getDate() + 1);
       alternatives.push(nextDay.toLocaleString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
         hour: 'numeric',
         minute: 'numeric',
         hour12: true
@@ -222,16 +235,9 @@ export async function POST(request: Request) {
       const laterTime = new Date(baseTime);
       laterTime.setHours(laterTime.getHours() + 2);
       alternatives.push(laterTime.toLocaleString('en-US', {
-        hour: 'numeric',
-        minute: 'numeric',
-        hour12: true
-      }));
-      
-      // Next day morning
-      const nextDayMorning = new Date(baseTime);
-      nextDayMorning.setDate(nextDayMorning.getDate() + 1);
-      nextDayMorning.setHours(10, 0, 0);
-      alternatives.push(nextDayMorning.toLocaleString('en-US', {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
         hour: 'numeric',
         minute: 'numeric',
         hour12: true
@@ -243,9 +249,9 @@ export async function POST(request: Request) {
     let message = '';
     if (conflictingAppointment) {
       const alternatives = getAlternativeTimes(requestedTime);
-      message = `no - ${alternatives[0]}, ${alternatives[1]}, ${alternatives[2]}`;
+      message = `No ${formattedTime} is not available, here are ${alternatives[0]} and ${alternatives[1]}`;
     } else {
-      message = 'yes';
+      message = `Yes ${formattedTime} is available`;
     }
     
     // Format response according to Vapi docs
