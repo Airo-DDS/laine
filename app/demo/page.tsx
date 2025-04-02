@@ -389,7 +389,7 @@ const DemoPage: FC = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-4 space-y-4">
-      <h1 className="text-2xl font-bold text-center">Claire Core Demo</h1>
+      <h1 className="text-2xl font-bold text-center">Claire Core</h1>
 
       {/* Controls */}
       <div className="flex justify-center items-center space-x-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
