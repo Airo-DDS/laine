@@ -105,17 +105,13 @@ export default function CallLogsPage() {
     
     // Parse the transcript if it's in a specific format
     try {
-      // If transcript is in JSON format
-      const parsed: TranscriptEntry[] = JSON.parse(transcript);
-      if (Array.isArray(parsed)) {
-        return parsed.map((entry, index) => (
-          <div key={entry.id || getStableKey(entry.content, index)} className="mb-2">
-            <span className="font-bold">{entry.role || 'Unknown'}:</span> {entry.content}
-          </div>
-        ));
-      }
-      // If it's a structured object
-      return JSON.stringify(parsed, null, 2);
+      // Try to parse as JSON
+      const entries: TranscriptEntry[] = JSON.parse(transcript);
+      return entries.map((entry, index) => (
+        <div key={getStableKey(entry.content, index)} className={`mb-2 ${entry.role === 'assistant' ? 'text-blue-700' : 'text-gray-800'}`}>
+          <span className="font-semibold">{entry.role || 'unknown'}:</span> {entry.content}
+        </div>
+      ));
     } catch {
       // If it's plain text or failed to parse
       // Simple format assuming "Speaker: Text" format with newlines
@@ -191,6 +187,8 @@ export default function CallLogsPage() {
                     selectedCall === call.callId ? 'bg-blue-50' : ''
                   }`}
                   onClick={() => handleCallSelect(call.callId)}
+                  role="tab"
+                  aria-selected={selectedCall === call.callId}
                 >
                   <div className="font-medium">{formatDate(call.createdAt)}</div>
                   <div className="text-sm text-gray-600">

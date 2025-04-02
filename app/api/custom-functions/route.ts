@@ -1,5 +1,3 @@
-// Disable TypeScript checking for this file to bypass route handler issues
-// @ts-nocheck
 import { NextResponse } from 'next/server';
 import { VapiClient } from '@vapi-ai/server-sdk';
 

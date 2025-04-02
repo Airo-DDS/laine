@@ -1,8 +1,7 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { type VapiInstance } from '@vapi-ai/web';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { FC } from 'react';
 import { default as VapiImpl } from '@vapi-ai/web';
 import { Mic, MicOff, PhoneOff, Bot, Loader2 } from 'lucide-react';
 
@@ -65,8 +64,8 @@ const FunctionCallsList = ({ calls }: { calls: FunctionCall[] }) => {
     <div className="mt-4 w-full max-w-md">
       <h2 className="text-xl font-semibold mb-2">Function Calls</h2>
       <div className="space-y-3">
-        {calls.map((call, index) => (
-          <div key={`call-${call.name}-${call.timestamp.getTime()}-${index}`} className="p-3 border rounded bg-gray-50 dark:bg-gray-800">
+        {calls.map((call) => (
+          <div key={`${call.name}-${call.timestamp.getTime()}`} className="p-3 border rounded bg-gray-50 dark:bg-gray-800">
             <div className="flex justify-between items-start">
               <h3 className="font-bold text-blue-600">{call.name}</h3>
               <span className="text-xs text-gray-500">{call.timestamp.toLocaleTimeString()}</span>
@@ -109,7 +108,7 @@ const FunctionCallsList = ({ calls }: { calls: FunctionCall[] }) => {
 };
 // --- End UI Components ---
 
-const DemoPage: React.FC = () => {
+const DemoPage: FC = () => {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [callStatus, setCallStatus] = useState<string>('idle');
@@ -117,7 +116,7 @@ const DemoPage: React.FC = () => {
   const [assistantIsSpeaking, setAssistantIsSpeaking] = useState(false);
   const [volumeLevel, setVolumeLevel] = useState<number>(0);
   const [functionCalls, setFunctionCalls] = useState<FunctionCall[]>([]);
-  const vapiRef = useRef<VapiInstance | null>(null);
+  const vapiRef = useRef<VapiImpl | null>(null);
 
   const assistantId = '5ddeb40e-9013-47f3-b980-2091e6b9269e';
   const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
@@ -197,16 +196,17 @@ const DemoPage: React.FC = () => {
         );
       } else if (message.type === 'function-call' && message.functionCall) {
         // Add function call to the list
+        const { name, parameters } = message.functionCall;
         const functionCall: FunctionCall = {
-          name: message.functionCall.name,
-          parameters: message.functionCall.parameters,
+          name,
+          parameters,
           timestamp: new Date(),
           pending: true
         };
         
         setFunctionCalls(prev => [...prev, functionCall]);
         setTranscript(prev => 
-          `${prev}\n[Function Call] ${message.functionCall.name}(${JSON.stringify(message.functionCall.parameters, null, 2)})`
+          `${prev}\n[Function Call] ${name}(${JSON.stringify(parameters, null, 2)})`
         );
       } else if (message.type === 'function-result' && message.functionResult) {
         // Update the corresponding function call with the result
@@ -243,11 +243,92 @@ const DemoPage: React.FC = () => {
       vapiInstance.stop();
       vapiRef.current = null;
     };
-  }, [publicKey]);
+  }, [publicKey]); // Re-run effect if publicKey changes
+
+  const startCallHandler = useCallback(() => {
+    if (!vapiRef.current) return;
+    setCallStatus('Initializing Call...');
+
+    // --- Assistant Overrides Example ---
+    const assistantOverrides = {
+      recordingEnabled: false, // Example override
+      variableValues: {
+        name: 'John', // Value for {{name}} placeholder
+        // Add other variables your assistant expects here
+      },
+    };
+    // --- End Assistant Overrides ---
+
+    console.log('Starting call with Assistant ID:', assistantId);
+    vapiRef.current.start(assistantId, assistantOverrides)
+      .then(() => {
+         console.log("Call start initiated successfully.");
+         // Call status will be updated by the 'call-start' event listener
+      })
+      .catch((e) => {
+        console.error("Failed to start call:", e);
+        setCallStatus(`Error starting call: ${e.message}`);
+        setIsSessionActive(false);
+      });
+  }, []);
+
+  const stopCallHandler = useCallback(() => {
+    if (!vapiRef.current) return;
+    setCallStatus('Stopping Call...');
+    vapiRef.current.stop();
+  }, []);
+
+  const toggleMuteHandler = useCallback(() => {
+    if (!vapiRef.current) return;
+    const currentMuteState = vapiRef.current.isMuted();
+    vapiRef.current.setMuted(!currentMuteState);
+    setIsMuted(!currentMuteState);
+    console.log(`Microphone muted: ${!currentMuteState}`);
+  }, []);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <h1 className="text-3xl font-bold mb-6">Airodental Voice Assistant Demo</h1>
+
+      <div className="flex space-x-4 mb-4">
+        <Button onClick={startCallHandler} disabled={isSessionActive}>
+          <Bot className="inline-block mr-2" size={18}/> Start Call
+        </Button>
+        <Button onClick={stopCallHandler} disabled={!isSessionActive}>
+          <PhoneOff className="inline-block mr-2" size={18}/> Stop Call
+        </Button>
+        <Button onClick={toggleMuteHandler} disabled={!isSessionActive}>
+          {isMuted ? <Mic className="inline-block mr-2" size={18}/> : <MicOff className="inline-block mr-2" size={18}/>}
+          {isMuted ? 'Unmute' : 'Mute'} Mic
+        </Button>
+      </div>
+
+      <StatusIndicator status={callStatus} />
+
+      {isSessionActive && (
+        <div className="w-full max-w-md mt-4">
+          <h2 className="text-xl font-semibold mb-2">Assistant Speaking Status</h2>
+          <VolumeIndicator level={volumeLevel} />
+          <p className="text-sm text-center mt-1">
+            {assistantIsSpeaking ? 'Assistant is speaking...' : 'Assistant is listening...'}
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col md:flex-row gap-4 w-full max-w-6xl mt-6">
+        {isSessionActive && (
+          <div className="w-full md:w-1/2">
+            <h2 className="text-xl font-semibold mb-2">Live Transcript</h2>
+            <TranscriptDisplay transcript={transcript} />
+          </div>
+        )}
+
+        {isSessionActive && (
+          <div className="w-full md:w-1/2">
+            <FunctionCallsList calls={functionCalls} />
+          </div>
+        )}
+      </div>
 
       {!isSessionActive && (
         <div className="mt-8 max-w-xl text-center">

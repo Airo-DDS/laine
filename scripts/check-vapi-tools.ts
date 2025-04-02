@@ -1,3 +1,5 @@
+#!/usr/bin/env ts-node
+// @ts-nocheck
 const { VapiClient } = require('@vapi-ai/server-sdk');
 require('dotenv').config();
 

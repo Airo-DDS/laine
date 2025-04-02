@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { PrismaClient } from '@prisma/client'
+import type { Role } from '@prisma/client'
 
 const prismaClient = new PrismaClient()
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const role = searchParams.get('role')
+    const roleParam = searchParams.get('role')
     
-    // Set up filter
-    const filter = role ? { role } : {}
+    // Set up filter with proper typing
+    const filter = roleParam ? { role: roleParam as Role } : {}
     
     const users = await prismaClient.user.findMany({
       where: filter,
