@@ -16,16 +16,39 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// More specific types for arguments
+type FunctionArguments = {
+  startDate?: string;
+  [key: string]: unknown;
+};
+
 // Type for possible request body formats
 type RequestBody = {
+  message?: {
+    toolCalls?: Array<{
+      id: string;
+      function?: {
+        name?: string;
+        arguments?: string | Record<string, unknown>;
+      };
+    }>;
+    toolCallList?: Array<{
+      id: string;
+      function?: {
+        name?: string;
+        arguments?: string | Record<string, unknown>;
+      };
+    }>;
+  };
   tool_call_id?: string;
   parameters?: { startDate?: string };
   toolCallId?: string;
-  arguments?: string;
+  arguments?: string | Record<string, unknown>;
   toolCalls?: Array<{
     id: string;
     function?: {
-      arguments?: string;
+      name?: string;
+      arguments?: string | Record<string, unknown>;
     };
   }>;
 };
@@ -48,23 +71,81 @@ export async function POST(request: Request) {
     let toolCallId = '';
     let startDate = '';
     
+    // Handle nested message format from VAPI
+    if (reqBody.message?.toolCalls && reqBody.message.toolCalls.length > 0) {
+      const toolCall = reqBody.message.toolCalls[0];
+      toolCallId = toolCall.id;
+      
+      if (typeof toolCall.function?.arguments === 'string') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments) as FunctionArguments;
+          startDate = args.startDate || '';
+        } catch (e) {
+          log('Error parsing tool call arguments', { error: e });
+        }
+      } else if (toolCall.function?.arguments) {
+        const args = toolCall.function.arguments as Record<string, unknown>;
+        startDate = (args.startDate as string) || '';
+      }
+    }
+    // Handle nested message with toolCallList format
+    else if (reqBody.message?.toolCallList && reqBody.message.toolCallList.length > 0) {
+      const toolCall = reqBody.message.toolCallList[0];
+      toolCallId = toolCall.id;
+      
+      if (typeof toolCall.function?.arguments === 'string') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments) as FunctionArguments;
+          startDate = args.startDate || '';
+        } catch (e) {
+          log('Error parsing tool call arguments', { error: e });
+        }
+      } else if (toolCall.function?.arguments) {
+        const args = toolCall.function.arguments as Record<string, unknown>;
+        startDate = (args.startDate as string) || '';
+      }
+    }
     // Handle direct VAPI format
-    if (reqBody.tool_call_id) {
+    else if (reqBody.tool_call_id) {
       toolCallId = reqBody.tool_call_id;
       startDate = reqBody.parameters?.startDate || '';
     } 
     // Handle OpenAI format (from VAPI proxy)
     else if (reqBody.toolCallId) {
       toolCallId = reqBody.toolCallId;
-      startDate = reqBody.arguments ? JSON.parse(reqBody.arguments).startDate : '';
+      
+      if (typeof reqBody.arguments === 'string') {
+        try {
+          const args = JSON.parse(reqBody.arguments) as FunctionArguments;
+          startDate = args.startDate || '';
+        } catch (e) {
+          log('Error parsing arguments', { error: e });
+        }
+      } else if (reqBody.arguments) {
+        const args = reqBody.arguments as Record<string, unknown>;
+        startDate = (args.startDate as string) || '';
+      }
     } 
     // Handle array format from VAPI
     else if (Array.isArray(reqBody.toolCalls) && reqBody.toolCalls.length > 0) {
       const toolCall = reqBody.toolCalls[0];
       toolCallId = toolCall.id;
-      startDate = toolCall.function?.arguments ? 
-        JSON.parse(toolCall.function.arguments).startDate : '';
+      
+      if (typeof toolCall.function?.arguments === 'string') {
+        try {
+          const args = JSON.parse(toolCall.function.arguments) as FunctionArguments;
+          startDate = args.startDate || '';
+        } catch (e) {
+          log('Error parsing tool call arguments', { error: e });
+        }
+      } else if (toolCall.function?.arguments) {
+        const args = toolCall.function.arguments as Record<string, unknown>;
+        startDate = (args.startDate as string) || '';
+      }
     }
+    
+    // For debugging, log the extracted parameters
+    log('Extracted parameters', { toolCallId, startDate });
     
     if (!startDate) {
       log('No start date provided in request');
@@ -82,6 +163,19 @@ export async function POST(request: Request) {
     }
 
     log('Checking availability for date', { startDate });
+    
+    // Fix date for demo if in the past (handle 2024 dates)
+    const requestedTime = new Date(startDate);
+    const currentYear = new Date().getFullYear();
+    
+    // If date is in the past because the year is 2024, update it to current year + 1
+    if (requestedTime < new Date() && requestedTime.getFullYear() < currentYear) {
+      requestedTime.setFullYear(currentYear + 1);
+      log('Updated date to future year for demo purposes', { 
+        originalDate: startDate,
+        updatedDate: requestedTime.toISOString()
+      });
+    }
     
     // Query appointments from database
     const appointments = await prisma.appointment.findMany({
@@ -104,7 +198,7 @@ export async function POST(request: Request) {
     log('Retrieved appointments', { count: appointments.length });
     
     // Format the date for display
-    const formattedDate = new Date(startDate).toLocaleString('en-US', {
+    const formattedDate = requestedTime.toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
@@ -113,9 +207,6 @@ export async function POST(request: Request) {
       minute: 'numeric',
       timeZone: 'America/Chicago',
     });
-    
-    // Check if the time is available
-    const requestedTime = new Date(startDate);
     
     // Find if there's a conflicting appointment
     const conflictingAppointment = appointments.find(appointment => {
@@ -132,14 +223,22 @@ export async function POST(request: Request) {
       message = `Yes, ${formattedDate} is available! Would you like me to book this appointment for you?`;
     }
     
+    // Format response according to Vapi docs
+    const response = {
+      tool_call_id: toolCallId,
+      status: 'success',
+      message,
+      // Also include results array format as per docs
+      results: [{
+        toolCallId: toolCallId,
+        result: message
+      }]
+    };
+    
     // Return the result
-    log('Sending response', { available: !conflictingAppointment });
+    log('Sending response', { available: !conflictingAppointment, message });
     return NextResponse.json(
-      {
-        tool_call_id: toolCallId,
-        status: 'success',
-        message
-      },
+      response,
       { headers: corsHeaders }
     );
     
@@ -147,11 +246,19 @@ export async function POST(request: Request) {
     // Log the error and return error response
     log('Error checking availability', error as Record<string, unknown>);
     
+    const toolCallId = reqBody?.tool_call_id || '';
+    const errorMessage = 'Failed to check availability. Please try again.';
+    
     return NextResponse.json(
       {
-        tool_call_id: reqBody?.tool_call_id || '',
+        tool_call_id: toolCallId,
         status: 'error',
-        message: 'Failed to check availability. Please try again.'
+        message: errorMessage,
+        // Also include results array format as per docs
+        results: [{
+          toolCallId: toolCallId,
+          result: errorMessage
+        }]
       },
       { 
         status: 500,
