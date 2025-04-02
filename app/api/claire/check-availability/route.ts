@@ -53,6 +53,50 @@ type RequestBody = {
   }>;
 };
 
+// Process date to ensure it's valid and in the future
+function processRequestDate(dateString: string): Date {
+  const currentTime = new Date();
+  const currentYear = currentTime.getFullYear();
+  let requestedTime: Date;
+  
+  // Create a date object from the string
+  const parsedDate = new Date(dateString);
+  
+  // Check if date string is a valid ISO format date
+  if (!Number.isNaN(parsedDate.getTime())) {
+    requestedTime = parsedDate;
+    
+    // If date is in the past, try to fix the year
+    if (requestedTime < currentTime) {
+      // First try current year
+      requestedTime.setFullYear(currentYear);
+      
+      // If still in the past, try next year
+      if (requestedTime < currentTime) {
+        requestedTime.setFullYear(currentYear + 1);
+      }
+      
+      log('Updated date year to ensure it is in the future', {
+        originalDate: dateString,
+        updatedDate: requestedTime.toISOString()
+      });
+    }
+    
+    return requestedTime;
+  }
+  
+  // If we get here, the date string was not valid ISO format
+  // For demo purposes, return the current date plus 1 day at 3:00 PM
+  log('Invalid date format, using tomorrow at 3PM as fallback', { 
+    originalDate: dateString
+  });
+  
+  const fallbackDate = new Date(currentTime);
+  fallbackDate.setDate(fallbackDate.getDate() + 1);
+  fallbackDate.setHours(15, 0, 0, 0); // 3:00 PM
+  return fallbackDate;
+}
+
 export async function POST(request: Request) {
   log('Received check-availability request');
   
@@ -165,18 +209,8 @@ export async function POST(request: Request) {
 
     log('Checking availability for date', { startDate });
     
-    // Fix date for demo if in the past (handle 2024 dates)
-    const requestedTime = new Date(startDate);
-    const currentYear = new Date().getFullYear();
-    
-    // If date is in the past because the year is 2024, update it to current year + 1
-    if (requestedTime < new Date() && requestedTime.getFullYear() < currentYear) {
-      requestedTime.setFullYear(currentYear + 1);
-      log('Updated date to future year for demo purposes', { 
-        originalDate: startDate,
-        updatedDate: requestedTime.toISOString()
-      });
-    }
+    // Process the date to ensure it's valid and in the future
+    const requestedTime = processRequestDate(startDate);
     
     // Query appointments from database
     const appointments = await prisma.appointment.findMany({
