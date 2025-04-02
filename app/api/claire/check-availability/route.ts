@@ -12,6 +12,42 @@ function logDebug(message: string, data?: unknown) {
   }
 }
 
+// Helper function to normalize dates
+function normalizeDateString(dateStr: string): string {
+  if (!dateStr) return '';
+  
+  try {
+    // Handle non-ISO date format (MM-DD-YY HH:MM:SS)
+    if (dateStr.match(/^\d{2}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}$/)) {
+      logDebug('Found non-ISO date format, converting', { original: dateStr });
+      const [datePart, timePart] = dateStr.split(' ');
+      const [month, day, year] = datePart.split('-');
+      // Convert to ISO format, assuming 20XX for the year
+      return `20${year}-${month}-${day}T${timePart}Z`;
+    }
+    
+    // Fix dates from 2024 to current year if we're past that date
+    const currentYear = new Date().getFullYear();
+    const date = new Date(dateStr);
+    
+    if (date.getFullYear() === 2024 && currentYear > 2024) {
+      logDebug('Updating year from 2024 to current year', { 
+        original: dateStr, 
+        year: currentYear 
+      });
+      
+      date.setFullYear(currentYear);
+      return date.toISOString();
+    }
+    
+    // Return original if already in ISO format
+    return dateStr;
+  } catch (error) {
+    logDebug('Error normalizing date string', { dateStr, error: String(error) });
+    return dateStr; // Return original if parsing fails
+  }
+}
+
 // VAPI Tool Call Interface - Updated to match the new format
 interface VapiToolCall {
   id: string;
@@ -68,11 +104,12 @@ function isBusinessDay(date: Date): boolean {
 }
 
 // Check if a date is in the past (with some buffer for processing)
-function isDateInPast(date: Date): boolean {
+function isDateInPast(date: Date, bufferMinutes = 15): boolean {
   const now = new Date();
-  // Add 15 minutes buffer for processing time differences
-  now.setMinutes(now.getMinutes() - 15);
-  return date < now;
+  // Add buffer minutes to allow for some flexibility
+  const bufferMs = bufferMinutes * 60 * 1000;
+  const bufferedDate = new Date(date.getTime() + bufferMs);
+  return bufferedDate < now;
 }
 
 // Convert UTC date to Pacific Time (dental practice timezone)
@@ -346,6 +383,7 @@ export async function POST(request: Request) {
         toolCallId = 'direct-call';
         startDate = String(body.startDate);
         endDate = String(body.endDate);
+        logDebug('Extracted parameters from direct format', { startDate, endDate });
       }
       // Case 2: Standard VAPI format
       else if ('id' in body && 'type' in body && body.type === 'function') {
@@ -357,92 +395,203 @@ export async function POST(request: Request) {
         if (vapiBody.function?.arguments) {
           if (typeof vapiBody.function.arguments === 'string') {
             logDebug('Parsing function arguments from string');
-            const args = JSON.parse(vapiBody.function.arguments) as { startDate?: string; endDate?: string };
+            try {
+              const args = JSON.parse(vapiBody.function.arguments) as { startDate?: string; endDate?: string };
+              startDate = args.startDate;
+              endDate = args.endDate;
+              logDebug('Successfully parsed arguments from string', { startDate, endDate });
+            } catch (parseError) {
+              logDebug('Failed to parse arguments from string', { 
+                error: String(parseError),
+                argumentsStr: vapiBody.function.arguments 
+              });
+            }
+          } else {
+            logDebug('Using direct object arguments', vapiBody.function.arguments);
+            const args = vapiBody.function.arguments as Record<string, string>;
             startDate = args.startDate;
             endDate = args.endDate;
-          } else {
-            logDebug('Using direct object arguments');
-            startDate = vapiBody.function.arguments.startDate;
-            endDate = vapiBody.function.arguments.endDate;
           }
         } 
         // Try to extract from parameters
         else if (vapiBody.function?.parameters) {
-          logDebug('Using parameters');
+          logDebug('Using parameters', vapiBody.function.parameters);
           startDate = vapiBody.function.parameters.startDate;
           endDate = vapiBody.function.parameters.endDate;
         }
       }
-      // Case 3: New VAPI nested message format
+      // Case 3: New VAPI nested message format - with improved extraction
       else if (body.message) {
         logDebug('Processing new VAPI nested message format');
-        const vapiMessage = body as unknown as VapiMessage;
         
-        // Try to extract from toolCalls array
-        if (vapiMessage.message?.toolCalls && vapiMessage.message.toolCalls.length > 0) {
-          const toolCall = vapiMessage.message.toolCalls[0];
-          toolCallId = toolCall.id;
+        const messageObj = body.message as Record<string, unknown>;
+        logDebug('Message object structure', { 
+          hasToolCalls: Boolean(messageObj.toolCalls),
+          hasToolCallList: Boolean(messageObj.toolCallList),
+          hasToolWithToolCallList: Boolean(messageObj.toolWithToolCallList),
+          keys: Object.keys(messageObj)
+        });
+        
+        // First try to extract from toolCalls array
+        if (Array.isArray(messageObj.toolCalls) && messageObj.toolCalls.length > 0) {
+          const toolCall = messageObj.toolCalls[0] as Record<string, unknown>;
+          logDebug('Extracting from toolCalls[0]', toolCall);
           
-          if (typeof toolCall.function?.arguments === 'string') {
-            logDebug('Parsing arguments from toolCalls');
-            const args = JSON.parse(toolCall.function.arguments) as { startDate?: string; endDate?: string };
-            startDate = args.startDate;
-            endDate = args.endDate;
+          if (toolCall.id) {
+            toolCallId = String(toolCall.id);
           }
-        }
-        // Try to extract from toolCallList array
-        else if (vapiMessage.message?.toolCallList && vapiMessage.message.toolCallList.length > 0) {
-          const toolCall = vapiMessage.message.toolCallList[0];
-          toolCallId = toolCall.id;
           
-          if (typeof toolCall.function?.arguments === 'string') {
-            logDebug('Parsing arguments from toolCallList');
-            const args = JSON.parse(toolCall.function.arguments) as { startDate?: string; endDate?: string };
-            startDate = args.startDate;
-            endDate = args.endDate;
-          } else if (typeof toolCall.function?.arguments === 'object' && toolCall.function?.arguments !== null) {
-            logDebug('Using direct object arguments from toolCallList');
-            const argsObj = toolCall.function.arguments as Record<string, string>;
-            startDate = argsObj.startDate;
-            endDate = argsObj.endDate;
-          }
-        }
-        // Try to extract from toolWithToolCallList
-        else if (vapiMessage.message?.toolWithToolCallList && vapiMessage.message.toolWithToolCallList.length > 0) {
-          const toolWithCall = vapiMessage.message.toolWithToolCallList[0];
-          
-          if (toolWithCall.toolCall) {
-            logDebug('Parsing from toolWithToolCallList');
-            toolCallId = toolWithCall.toolCall.id;
-            
-            if (typeof toolWithCall.toolCall.function?.arguments === 'string') {
-              const args = JSON.parse(toolWithCall.toolCall.function.arguments) as { startDate?: string; endDate?: string };
-              startDate = args.startDate;
-              endDate = args.endDate;
-            } else if (typeof toolWithCall.toolCall.function?.arguments === 'object' && toolWithCall.toolCall.function?.arguments !== null) {
-              const argsObj = toolWithCall.toolCall.function.arguments as Record<string, string>;
-              startDate = argsObj.startDate;
-              endDate = argsObj.endDate;
+          const funcObj = toolCall.function as Record<string, unknown>;
+          if (funcObj) {
+            if (typeof funcObj.arguments === 'string') {
+              try {
+                logDebug('Parsing arguments string from toolCalls', funcObj.arguments);
+                const args = JSON.parse(funcObj.arguments as string) as Record<string, string>;
+                startDate = args.startDate;
+                endDate = args.endDate;
+                logDebug('Successfully extracted from toolCalls string arguments', { startDate, endDate });
+              } catch (error) {
+                logDebug('Error parsing arguments from toolCalls', { error: String(error) });
+              }
+            } else if (typeof funcObj.arguments === 'object' && funcObj.arguments !== null) {
+              const args = funcObj.arguments as Record<string, unknown>;
+              logDebug('Direct arguments object from toolCalls', args);
+              startDate = args.startDate ? String(args.startDate) : undefined;
+              endDate = args.endDate ? String(args.endDate) : undefined;
+              logDebug('Extracted from toolCalls object arguments', { startDate, endDate });
             }
           }
         }
+        
+        // If first attempt failed, try extracting from toolCallList
+        if ((!startDate || !endDate) && Array.isArray(messageObj.toolCallList) && messageObj.toolCallList.length > 0) {
+          const toolCall = messageObj.toolCallList[0] as Record<string, unknown>;
+          logDebug('Extracting from toolCallList[0]', toolCall);
+          
+          if (toolCall.id) {
+            toolCallId = String(toolCall.id);
+          }
+          
+          const funcObj = toolCall.function as Record<string, unknown>;
+          if (funcObj) {
+            if (typeof funcObj.arguments === 'string') {
+              try {
+                logDebug('Parsing arguments string from toolCallList', funcObj.arguments);
+                const args = JSON.parse(funcObj.arguments as string) as Record<string, string>;
+                startDate = args.startDate;
+                endDate = args.endDate;
+                logDebug('Successfully extracted from toolCallList string arguments', { startDate, endDate });
+              } catch (error) {
+                logDebug('Error parsing arguments from toolCallList', { error: String(error) });
+              }
+            } else if (typeof funcObj.arguments === 'object' && funcObj.arguments !== null) {
+              const args = funcObj.arguments as Record<string, unknown>;
+              logDebug('Direct arguments object from toolCallList', args);
+              startDate = args.startDate ? String(args.startDate) : undefined;
+              endDate = args.endDate ? String(args.endDate) : undefined;
+              logDebug('Extracted from toolCallList object arguments', { startDate, endDate });
+            }
+          }
+        }
+        
+        // Last attempt from toolWithToolCallList
+        if ((!startDate || !endDate) && Array.isArray(messageObj.toolWithToolCallList) && messageObj.toolWithToolCallList.length > 0) {
+          const toolWithCall = messageObj.toolWithToolCallList[0] as Record<string, unknown>;
+          logDebug('Extracting from toolWithToolCallList[0]', toolWithCall);
+          
+          if (toolWithCall.toolCall) {
+            const toolCall = toolWithCall.toolCall as Record<string, unknown>;
+            
+            if (toolCall.id) {
+              toolCallId = String(toolCall.id);
+            }
+            
+            const funcObj = toolCall.function as Record<string, unknown>;
+            if (funcObj) {
+              if (typeof funcObj.arguments === 'string') {
+                try {
+                  logDebug('Parsing arguments string from toolWithToolCallList', funcObj.arguments);
+                  const args = JSON.parse(funcObj.arguments as string) as Record<string, string>;
+                  startDate = args.startDate;
+                  endDate = args.endDate;
+                  logDebug('Successfully extracted from toolWithToolCallList string arguments', { startDate, endDate });
+                } catch (error) {
+                  logDebug('Error parsing arguments from toolWithToolCallList', { error: String(error) });
+                }
+              } else if (typeof funcObj.arguments === 'object' && funcObj.arguments !== null) {
+                const args = funcObj.arguments as Record<string, unknown>;
+                logDebug('Direct arguments object from toolWithToolCallList', args);
+                startDate = args.startDate ? String(args.startDate) : undefined;
+                endDate = args.endDate ? String(args.endDate) : undefined;
+                logDebug('Extracted from toolWithToolCallList object arguments', { startDate, endDate });
+              }
+            }
+          }
+        }
+      }
+      
+      // Normalize date formats (fix years, handle different formats)
+      if (startDate) {
+        startDate = normalizeDateString(startDate);
+      }
+      
+      if (endDate) {
+        endDate = normalizeDateString(endDate);
       }
       
       // Check if we extracted the required parameters
       if (startDate && endDate) {
         logDebug('Successfully extracted parameters', { toolCallId, startDate, endDate });
       } else {
-        logDebug('Failed to extract required parameters');
-        return NextResponse.json({
-          results: [{
-            toolCallId,
-            error: 'Could not extract startDate and endDate from the request'
-          }]
-        }, { status: 400, headers: corsHeaders });
+        logDebug('Failed to extract required parameters', { 
+          foundStart: Boolean(startDate), 
+          foundEnd: Boolean(endDate),
+          bodyKeys: Object.keys(body)
+        });
+        
+        // Last attempt: search for startDate/endDate anywhere in the request
+        const flattenAndSearch = (obj: Record<string, unknown>, depth = 0, path = ''): void => {
+          // Limit recursion depth to prevent stack overflow
+          if (depth > 10) return;
+          
+          for (const [key, value] of Object.entries(obj)) {
+            const currentPath = path ? `${path}.${key}` : key;
+            
+            if (key === 'startDate' && !startDate && typeof value === 'string') {
+              startDate = normalizeDateString(value);
+              logDebug(`Found startDate at ${currentPath}`, { value, normalized: startDate });
+            }
+            
+            if (key === 'endDate' && !endDate && typeof value === 'string') {
+              endDate = normalizeDateString(value);
+              logDebug(`Found endDate at ${currentPath}`, { value, normalized: endDate });
+            }
+            
+            if (typeof value === 'object' && value !== null) {
+              flattenAndSearch(value as Record<string, unknown>, depth + 1, currentPath);
+            }
+          }
+        };
+        
+        // Only perform deep search if we still don't have dates
+        if (!startDate || !endDate) {
+          logDebug('Attempting deep search for date parameters');
+          flattenAndSearch(body as Record<string, unknown>);
+        }
+        
+        // If still not found, return error
+        if (!startDate || !endDate) {
+          return NextResponse.json({
+            results: [{
+              toolCallId,
+              error: 'Could not extract startDate and endDate from the request'
+            }]
+          }, { status: 400, headers: corsHeaders });
+        }
       }
       
     } catch (error) {
-      logDebug('Error extracting parameters', { error: (error as Error).message });
+      logDebug('Error extracting parameters', { error: (error as Error).message, stack: (error as Error).stack });
       return NextResponse.json({
         results: [{
           toolCallId,
@@ -478,23 +627,56 @@ export async function POST(request: Request) {
     }
 
     // Check if dates are in the past
+    const now = new Date();
     if (isDateInPast(startDateObj)) {
-      logDebug('Start date is in the past', { startDate });
-      return NextResponse.json({
-        results: [{
-          toolCallId,
-          error: 'The requested start date is in the past. Please provide a future date.'
-        }]
-      }, { status: 400, headers: corsHeaders });
+      // If it's today but earlier, just set to now + 30 minutes for some wiggle room
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const isPastButToday = 
+        startDateObj.getFullYear() === today.getFullYear() &&
+        startDateObj.getMonth() === today.getMonth() && 
+        startDateObj.getDate() === today.getDate();
+      
+      if (isPastButToday) {
+        logDebug('Adjusting past date from today to current time + 30 min', { original: startDate });
+        // Set to now + 30 minutes
+        startDateObj.setTime(now.getTime() + 30 * 60 * 1000);
+        startDate = startDateObj.toISOString();
+      } else {
+        logDebug('Start date is in the past', { 
+          startDate,
+          startDateObj: startDateObj.toString(),
+          now: now.toString() 
+        });
+        
+        return NextResponse.json({
+          results: [{
+            toolCallId,
+            error: 'The requested start date is in the past. Please provide a future date.'
+          }]
+        }, { status: 400, headers: corsHeaders });
+      }
+    }
+
+    // Always ensure endDate is after startDate
+    if (endDateObj <= startDateObj) {
+      logDebug('End date is not after start date, adjusting', {
+        startDate,
+        endDate
+      });
+      // Set end date to startDate + 30 minutes
+      endDateObj.setTime(startDateObj.getTime() + 30 * 60 * 1000);
+      endDate = endDateObj.toISOString();
     }
 
     // Handle time zone conversion for clarity
     const startDateLocal = convertToPacificTime(startDateObj);
     const endDateLocal = convertToPacificTime(endDateObj);
 
-    logDebug('Checking availability for range', {
-      start: startDateObj.toISOString(),
-      end: endDateObj.toISOString(),
+    logDebug('Final date parameters after normalization and validation', {
+      start: startDate,
+      end: endDate,
       startLocal: startDateLocal.toString(),
       endLocal: endDateLocal.toString()
     });
@@ -503,7 +685,15 @@ export async function POST(request: Request) {
     const timeDiffMs = endDateObj.getTime() - startDateObj.getTime();
     if (timeDiffMs < 60 * 60 * 1000) { // Less than 1 hour difference
       specificTime = new Date((startDateObj.getTime() + endDateObj.getTime()) / 2);
-      logDebug('Detected specific time request', { specificTime: specificTime.toISOString() });
+      logDebug('Detected specific time request', { 
+        specificTime: specificTime.toISOString(),
+        timeDiff: `${Math.round(timeDiffMs / 60000)} minutes`
+      });
+    } else {
+      logDebug('Detected time range request', { 
+        timeDiff: `${Math.round(timeDiffMs / 60000)} minutes`,
+        hours: Math.round(timeDiffMs / 3600000)
+      });
     }
 
     // Find available slots
