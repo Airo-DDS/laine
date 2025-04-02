@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { parse } from 'date-fns';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 
 // Define interfaces for the API response
@@ -15,12 +14,46 @@ interface ApiResponse {
   results: ApiResult[];
 }
 
+interface Appointment {
+  id: string;
+  date: string;
+  status: string;
+  patient: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
 export default function CheckAvailability() {
-  const [inputText, setInputText] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState('');
   const [error, setError] = useState('');
   const [rawData, setRawData] = useState<ApiResponse | null>(null);
+  const [currentAppointments, setCurrentAppointments] = useState<Appointment[]>([]);
+
+  // Fetch current appointments on component mount
+  useEffect(() => {
+    const fetchAppointments = async () => {
+      try {
+        const response = await axios.get('/api/appointments');
+        console.log('Raw appointments data:', response.data);
+        setCurrentAppointments(response.data);
+      } catch (err) {
+        console.error('Error fetching appointments:', err);
+        if (axios.isAxiosError(err)) {
+          console.log('Error details:', {
+            status: err.response?.status,
+            statusText: err.response?.statusText,
+            data: err.response?.data,
+            headers: err.response?.headers
+          });
+        }
+      }
+    };
+    fetchAppointments();
+  }, []);
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,34 +63,13 @@ export default function CheckAvailability() {
     setRawData(null);
 
     try {
-      // Try to parse the input text as a date
-      let startDate: Date;
-      let endDate: Date;
-
-      try {
-        // Try to parse inputs like "April.3 1:30pm"
-        startDate = parse(inputText, 'MMMM d h:mma', new Date());
-        
-        // Set end date 30 minutes later
-        endDate = new Date(startDate);
-        endDate.setMinutes(endDate.getMinutes() + 30);
-      } catch {
-        setError('Could not parse the date. Please use a format like "April 3 1:30pm"');
-        setLoading(false);
-        return;
-      }
-
-      // Format dates for API call
-      const formattedStartDate = startDate.toISOString();
-      const formattedEndDate = endDate.toISOString();
-
       // Create payload for the API
       const payload = {
-        startDate: formattedStartDate,
-        endDate: formattedEndDate
+        startDate,
+        endDate
       };
 
-      // Make API call
+      // Make API call to the live URL
       const response = await axios.post(
         'https://claire-core.vercel.app/api/claire/check-availability',
         payload,
@@ -67,8 +79,8 @@ export default function CheckAvailability() {
             'Accept': 'application/json',
           },
           withCredentials: false,
-          timeout: 10000, // 10 second timeout
-          validateStatus: (status) => status < 500 // Don't reject on 4xx status codes
+          timeout: 10000,
+          validateStatus: (status) => status < 500
         }
       );
 
@@ -111,19 +123,32 @@ export default function CheckAvailability() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left column - Input */}
         <div className="bg-white p-4 rounded shadow">
-          <h2 className="text-lg font-semibold mb-4">Enter Date & Time</h2>
+          <h2 className="text-lg font-semibold mb-4">Enter Date Range</h2>
           <form onSubmit={handleCheck} className="space-y-4">
             <div>
-              <label htmlFor="dateTime" className="block mb-1">
-                Date and Time (e.g., &ldquo;April 3 1:30pm&rdquo;)
+              <label htmlFor="startDate" className="block mb-1">
+                Start Date (ISO format)
               </label>
               <input
-                id="dateTime"
+                id="startDate"
                 type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
                 className="w-full p-2 border rounded"
-                placeholder="April 3 1:30pm"
+                placeholder="2025-04-02T03:30:00.000Z"
+              />
+            </div>
+            <div>
+              <label htmlFor="endDate" className="block mb-1">
+                End Date (ISO format)
+              </label>
+              <input
+                id="endDate"
+                type="text"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="2025-04-02T04:00:00.000Z"
               />
             </div>
             <button
@@ -157,14 +182,14 @@ export default function CheckAvailability() {
           )}
           
           {!error && !result && !loading && (
-            <p className="text-gray-500">Enter a date and time to check availability</p>
+            <p className="text-gray-500">Enter a date range to check availability</p>
           )}
           
           {loading && <p className="text-blue-500">Checking availability...</p>}
         </div>
       </div>
       
-      {/* Raw appointment data */}
+      {/* Raw Response Data */}
       <div className="mt-8 bg-white p-4 rounded shadow">
         <h2 className="text-lg font-semibold mb-4">Raw Response Data</h2>
         {rawData ? (
@@ -173,6 +198,62 @@ export default function CheckAvailability() {
           </pre>
         ) : (
           <p className="text-gray-500">No data available</p>
+        )}
+      </div>
+
+      {/* Current Appointments */}
+      <div className="mt-8 bg-white p-4 rounded shadow">
+        <h2 className="text-lg font-semibold mb-4">Current Appointments</h2>
+        {currentAppointments.length > 0 ? (
+          <>
+            <div className="overflow-x-auto mb-4">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentAppointments.map((appointment) => (
+                    <tr key={appointment.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {new Date(appointment.date).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {appointment.patient.firstName} {appointment.patient.lastName}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {appointment.status}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Raw Appointments Data */}
+            <div className="mt-4">
+              <h3 className="text-md font-semibold mb-2">Raw Appointments Data</h3>
+              <pre className="bg-gray-100 p-4 rounded overflow-auto max-h-96 text-sm">
+                {JSON.stringify(currentAppointments, null, 2)}
+              </pre>
+            </div>
+          </>
+        ) : (
+          <div>
+            <p className="text-gray-500 mb-4">No appointments found</p>
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4">
+              <p>Debug Information:</p>
+              <ul className="list-disc list-inside mt-2">
+                <li>API Endpoint: https://claire-core.vercel.app/api/appointments</li>
+                <li>Response Status: {currentAppointments ? '200' : 'No response'}</li>
+                <li>Data Type: {Array.isArray(currentAppointments) ? 'Array' : typeof currentAppointments}</li>
+                <li>Data Length: {Array.isArray(currentAppointments) ? currentAppointments.length : 'N/A'}</li>
+              </ul>
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -3,46 +3,22 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-interface VapiToolCallWebhook {
-  message: {
-    toolCallList?: Array<{
-      id: string;
-      function?: {
-        name: string;
-        arguments: string; // JSON string containing parameters
-      };
-    }>;
-    type?: string;
-    call?: {
-      id: string;
+// VAPI Tool Call Interface
+interface VapiToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    parameters?: {
+      startDate?: string;
+      endDate?: string;
     };
-    functionCall?: {
-      name: string;
-      parameters: Record<string, unknown> | string; // JSON object or string containing parameters
-    };
+    arguments?: string; // JSON string containing parameters
   };
-}
-
-interface CheckAvailabilityParams {
-  startDate: string;
-  endDate: string;
-}
-
-// For backward compatibility
-interface RawParameters {
-  startDate?: string;
-  endDate?: string;
-  dateFrom?: string;
-  dateTo?: string;
-}
-
-// Backward compatibility adapter for dateFrom/dateTo parameters
-function adaptParameters(params: RawParameters): CheckAvailabilityParams {
-  // Handle both naming conventions
-  return {
-    startDate: params.startDate || params.dateFrom || '',
-    endDate: params.endDate || params.dateTo || ''
-  };
+  messages: Array<{
+    type: string;
+    content: string;
+  }>;
 }
 
 // Define standard appointment slots (30 minutes each, from 9am to 5pm)
@@ -193,225 +169,116 @@ export async function POST(request: Request) {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
-          'Access-Control-Max-Age': '86400',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         },
       });
     }
 
-    // Add CORS headers to the response
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
-    };
-
     // Parse the request body
-    const body = await request.json() as VapiToolCallWebhook;
-    console.log('Received webhook payload:', JSON.stringify(body));
-    
-    let toolCallId: string | undefined;
-    let functionParams: CheckAvailabilityParams | undefined;
-    
-    // Handle VAPI webhook format
-    if (body.message?.toolCallList && body.message.toolCallList.length > 0) {
-      // New format
-      const toolCall = body.message.toolCallList[0];
-      toolCallId = toolCall.id;
+    const body = await request.json() as VapiToolCall | { startDate: string; endDate: string };
+    console.log('Received request body:', JSON.stringify(body, null, 2));
+
+    // Extract toolCallId and parameters
+    let toolCallId: string;
+    let startDate: string;
+    let endDate: string;
+
+    if ('id' in body) {
+      // Handle VAPI tool call format
+      toolCallId = body.id;
       
-      if (toolCall.function?.name !== 'check_availability' && toolCall.function?.name !== 'checkAvailability') {
-        return NextResponse.json(
-          {
-            results: [
-              {
-                toolCallId,
-                error: `Invalid function name: ${toolCall.function?.name || 'undefined'}`
-              }
-            ]
-          },
-          { status: 400 }
-        );
-      }
-      
-      try {
-        const parsedParams = JSON.parse(toolCall.function.arguments);
-        // Apply parameter adapter
-        functionParams = adaptParameters(parsedParams);
-      } catch (e) {
-        return NextResponse.json(
-          {
-            results: [
-              {
-                toolCallId,
-                error: `Failed to parse function arguments: ${e instanceof Error ? e.message : String(e)}`
-              }
-            ]
-          },
-          { status: 400 }
-        );
-      }
-    } else if (body.message?.functionCall) {
-      // Legacy format - support for backward compatibility
-      toolCallId = body.message?.call?.id;
-      
-      if (body.message.functionCall.name !== 'check_availability' && body.message.functionCall.name !== 'checkAvailability') {
-        return NextResponse.json(
-          {
-            results: [
-              {
-                toolCallId,
-                error: `Invalid function name: ${body.message.functionCall.name}`
-              }
-            ]
-          },
-          { status: 400 }
-        );
-      }
-      
-      try {
-        let parsedParams: RawParameters;
-        if (typeof body.message.functionCall.parameters === 'string') {
-          parsedParams = JSON.parse(body.message.functionCall.parameters);
-        } else {
-          parsedParams = body.message.functionCall.parameters as RawParameters;
+      // Parse parameters from function arguments
+      if (typeof body.function?.arguments === 'string') {
+        const args = JSON.parse(body.function.arguments) as { startDate: string; endDate: string };
+        startDate = args.startDate;
+        endDate = args.endDate;
+      } else if (body.function?.parameters) {
+        const params = body.function.parameters;
+        if (!params.startDate || !params.endDate) {
+          return NextResponse.json({
+            results: [{
+              toolCallId,
+              error: 'Missing required parameters: startDate and endDate'
+            }]
+          }, { status: 400 });
         }
-        // Apply parameter adapter
-        functionParams = adaptParameters(parsedParams);
-      } catch (e) {
-        return NextResponse.json(
-          {
-            results: [
-              {
-                toolCallId,
-                error: `Failed to parse function parameters: ${e instanceof Error ? e.message : String(e)}`
-              }
-            ]
-          },
-          { status: 400 }
-        );
+        startDate = params.startDate;
+        endDate = params.endDate;
+      } else {
+        return NextResponse.json({
+          results: [{
+            toolCallId,
+            error: 'Missing or invalid parameters in the request'
+          }]
+        }, { status: 400 });
       }
     } else {
-      // Direct API call format - for debugging and direct testing
-      console.log('Processing direct API call format');
-      toolCallId = 'direct-call'; // Placeholder ID for direct API calls
-      try {
-        functionParams = adaptParameters(body as RawParameters);
-      } catch (e) {
-        return NextResponse.json(
-          {
-            results: [
-              {
-                toolCallId,
-                error: `Failed to parse direct parameters: ${e instanceof Error ? e.message : String(e)}`
-              }
-            ]
-          },
-          { status: 400 }
-        );
-      }
-    }
-    
-    if (!functionParams) {
-      return NextResponse.json(
-        {
-          results: [
-            {
-              toolCallId,
-              error: 'Missing function parameters'
-            }
-          ]
-        },
-        { status: 400 }
-      );
-    }
-    
-    const { startDate, endDate } = functionParams;
-    
-    if (!startDate || !endDate) {
-      return NextResponse.json(
-        {
-          results: [
-            {
-              toolCallId,
-              error: 'Missing required parameters: startDate and endDate are required'
-            }
-          ]
-        },
-        { status: 400 }
-      );
+      // Handle direct API call format
+      toolCallId = 'direct-call';
+      startDate = body.startDate;
+      endDate = body.endDate;
     }
 
-    // Parse dates from the input parameters
+    // Validate required parameters
+    if (!startDate || !endDate) {
+      return NextResponse.json({
+        results: [{
+          toolCallId,
+          error: 'Missing required parameters: startDate and endDate'
+        }]
+      }, { status: 400 });
+    }
+
+    // Parse dates
     const startDateObj = new Date(startDate);
     const endDateObj = new Date(endDate);
-    
+
     if (Number.isNaN(startDateObj.getTime()) || Number.isNaN(endDateObj.getTime())) {
-      return NextResponse.json(
-        {
-          results: [
-            {
-              toolCallId,
-              error: 'Invalid date format provided'
-            }
-          ]
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        results: [{
+          toolCallId,
+          error: 'Invalid date format provided'
+        }]
+      }, { status: 400 });
     }
 
-    console.log(`Checking availability from ${startDateObj.toISOString()} to ${endDateObj.toISOString()}`);
-    
-    // Find available slots by querying the database
+    // Find available slots
     const availableSlots = await findAvailableSlots(startDateObj, endDateObj);
     
     // Format the response
     const responseMessage = formatAvailabilityResponse(availableSlots);
-    
-    console.log('Returning response:', responseMessage);
-    
-    // Return the response in the format expected by VAPI
+
+    // Return in VAPI tool call response format
     return NextResponse.json({
-      results: [
-        {
-          toolCallId,
-          result: responseMessage
-        }
-      ]
-    }, { headers });
+      results: [{
+        toolCallId,
+        result: responseMessage
+      }]
+    });
+
   } catch (error) {
-    console.error('Error checking availability:', error);
-    return NextResponse.json(
-      {
-        results: [
-          {
-            toolCallId: error instanceof Error && 'id' in error ? (error as unknown as { id: string }).id : 'error',
-            error: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
-          }
-        ]
-      },
-      { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
-        }
-      }
-    );
+    console.error('Error processing request:', error);
+    
+    // Return error in VAPI tool call response format
+    return NextResponse.json({
+      results: [{
+        toolCallId: 'error',
+        error: `Failed to check availability: ${error instanceof Error ? error.message : String(error)}`
+      }]
+    }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
 }
 
-// Update the OPTIONS handler for CORS
+// Handle CORS preflight requests
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
-      'Access-Control-Max-Age': '86400',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   });
 } 
