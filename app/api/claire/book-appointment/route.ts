@@ -3,6 +3,45 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// Define standard appointment slots (30 minutes each, from 9am to 5pm)
+const APPOINTMENT_SLOTS = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', 
+  '15:00', '15:30', '16:00', '16:30', '17:00'
+];
+
+// Check if a date is a business day (Monday-Friday)
+function isBusinessDay(date: Date): boolean {
+  const day = date.getDay();
+  return day !== 0 && day !== 6; // 0 = Sunday, 6 = Saturday
+}
+
+// Validate if the appointment time is within business hours
+function isValidAppointmentTime(dateTime: Date): { valid: boolean; message?: string } {
+  // Check if it's a business day
+  if (!isBusinessDay(dateTime)) {
+    return { 
+      valid: false, 
+      message: 'Appointments can only be scheduled Monday through Friday.'
+    };
+  }
+  
+  // Format the time part to check against allowed slots
+  const hours = dateTime.getUTCHours().toString().padStart(2, '0');
+  const minutes = dateTime.getUTCMinutes().toString().padStart(2, '0');
+  const timeStr = `${hours}:${minutes}`;
+  
+  // Check if the time matches an allowed slot
+  if (!APPOINTMENT_SLOTS.includes(timeStr)) {
+    return { 
+      valid: false, 
+      message: 'Appointments can only be scheduled between 9:00 AM and 5:00 PM in 30-minute intervals.'
+    };
+  }
+  
+  return { valid: true };
+}
+
 interface VapiToolCallWebhook {
   message: {
     toolCallList?: Array<{
@@ -164,6 +203,22 @@ export async function POST(request: Request) {
 
     // Parse the appointment start time
     const appointmentDate = new Date(start);
+    
+    // Validate that the appointment time is within business hours
+    const timeValidation = isValidAppointmentTime(appointmentDate);
+    if (!timeValidation.valid) {
+      return NextResponse.json(
+        {
+          results: [
+            {
+              toolCallId,
+              error: timeValidation.message
+            }
+          ]
+        },
+        { status: 400 }
+      );
+    }
     
     // Check if the time slot is already booked
     const existingAppointment = await prisma.appointment.findFirst({

@@ -124,6 +124,16 @@ export default function CheckAvailability() {
         {/* Left column - Input */}
         <div className="bg-white p-4 rounded shadow">
           <h2 className="text-lg font-semibold mb-4">Enter Date Range</h2>
+          
+          <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-blue-700">
+            <p className="font-medium">Appointment Constraints:</p>
+            <ul className="list-disc list-inside mt-1 text-sm">
+              <li>Business hours: Monday-Friday, 9:00 AM - 5:00 PM (UTC)</li>
+              <li>Appointments are scheduled in 30-minute slots</li>
+              <li>All times are in UTC timezone</li>
+            </ul>
+          </div>
+          
           <form onSubmit={handleCheck} className="space-y-4">
             <div>
               <label htmlFor="startDate" className="block mb-1">
@@ -219,7 +229,17 @@ export default function CheckAvailability() {
                   {currentAppointments.map((appointment) => (
                     <tr key={appointment.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(appointment.date).toLocaleString()}
+                        {new Date(appointment.date).toLocaleString(undefined, {
+                          timeZone: 'UTC',
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: false
+                        })}
+                        <span className="text-xs text-gray-500 ml-2">(UTC)</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {appointment.patient.firstName} {appointment.patient.lastName}
