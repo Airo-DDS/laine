@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FC } from 'react';
 import Vapi from '@vapi-ai/web';
 import {
-  Mic, MicOff, Bot, Terminal, AlertCircle, Info, Settings2, Play, Square, Volume2, CircleDot
+  Mic, MicOff, Bot, Terminal, AlertCircle, Settings2, Play, Square, Volume2, CircleDot
 } from 'lucide-react';
 
 // Define types for messages and logs
@@ -29,14 +29,6 @@ interface Message {
   transcriptType?: 'partial' | 'final'; // Specific to transcript messages
 }
 
-interface LogEntry {
-  id: number;
-  timestamp: string;
-  type: string;
-  payload?: string;
-  message: string;
-}
-
 interface ToolCallLog {
   id: string;
   name: string;
@@ -44,6 +36,8 @@ interface ToolCallLog {
   result?: string;
   error?: string;
   timestamp: number;
+  aiRequest?: string;
+  aiResponse?: string;
 }
 
 interface VapiMessage {
@@ -86,59 +80,46 @@ const DemoPage: FC = () => {
   const [isAssistantSpeaking, setIsAssistantSpeaking] = useState<boolean>(false);
   const [assistantVolume, setAssistantVolume] = useState<number>(0);
   const [transcript, setTranscript] = useState<Message[]>([]);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCallLog[]>([]);
   const [lastStatusUpdate, setLastStatusUpdate] = useState<string>('Idle');
   const [error, setError] = useState<string | null>(null);
 
   // Refs for auto-scrolling
   const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const logsEndRef = useRef<HTMLDivElement>(null);
   const toolCallsEndRef = useRef<HTMLDivElement>(null);
 
   // Assistant ID and Public Key from environment variables
   const assistantId = "5ddeb40e-9013-47f3-b980-2091e6b9269e";
   const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
 
-  // Helper function to add logs
-  const addLog = useCallback((type: string, message: string, payload?: unknown) => {
+  // Helper function to log events
+  const logEvent = useCallback((type: string, message: string, payload?: unknown) => {
     console.log(`[${type}] ${message}`, payload || '');
-    setLogs(prevLogs => [
-      ...prevLogs,
-      {
-        id: Date.now() + Math.random(), // Simple unique ID
-        timestamp: new Date().toLocaleTimeString(),
-        type,
-        message,
-        payload: payload ? JSON.stringify(payload, null, 2) : undefined,
-      },
-    ]);
   }, []);
 
   // Initialize Vapi SDK
   useEffect(() => {
     if (!publicKey) {
       setError("VAPI Public Key is missing. Please set NEXT_PUBLIC_VAPI_PUBLIC_KEY environment variable.");
-      addLog('Error', 'VAPI Public Key is missing.');
+      logEvent('Error', 'VAPI Public Key is missing.');
       return;
     }
     const vapi = new Vapi(publicKey);
     setVapiInstance(vapi);
-    addLog('Info', 'Vapi SDK Initialized');
+    logEvent('Info', 'Vapi SDK Initialized');
 
     // --- Event Listeners ---
     const handleCallStart = () => {
-      addLog('Info', 'Call started');
+      logEvent('Info', 'Call started');
       setIsSessionActive(true);
       setTranscript([]);
-      setLogs([]);
       setToolCalls([]);
       setError(null);
       setLastStatusUpdate('Connecting...');
     };
 
     const handleCallEnd = () => {
-      addLog('Info', 'Call ended');
+      logEvent('Info', 'Call ended');
       setIsSessionActive(false);
       setLastStatusUpdate('Call Ended');
       setIsAssistantSpeaking(false);
@@ -146,12 +127,12 @@ const DemoPage: FC = () => {
     };
 
     const handleSpeechStart = () => {
-      addLog('Info', 'Assistant speech started');
+      logEvent('Info', 'Assistant speech started');
       setIsAssistantSpeaking(true);
     };
 
     const handleSpeechEnd = () => {
-      addLog('Info', 'Assistant speech ended');
+      logEvent('Info', 'Assistant speech ended');
       setIsAssistantSpeaking(false);
     };
 
@@ -160,7 +141,7 @@ const DemoPage: FC = () => {
     };
 
     const handleMessage = (message: VapiMessage) => {
-      addLog('Message', `Received message of type: ${message.type}`, message);
+      logEvent('Message', `Received message of type: ${message.type}`, message);
       const timestamp = Date.now();
 
       if (message.type === 'transcript' && message.transcript) {
@@ -225,9 +206,9 @@ const DemoPage: FC = () => {
         }]);
       } else if (message.type === 'status-update' && message.status) {
         setLastStatusUpdate(message.status);
-        addLog('Status', `Call status updated: ${message.status}`, message);
+        logEvent('Status', `Call status updated: ${message.status}`, message);
         if (message.status === 'ended' && message.endedReason) {
-          addLog('Info', `Call ended reason: ${message.endedReason}`);
+          logEvent('Info', `Call ended reason: ${message.endedReason}`);
         }
       } else if (message.type === 'conversation-update' && message.conversation) {
         // Process tool calls from conversation updates
@@ -271,7 +252,7 @@ const DemoPage: FC = () => {
           // Update existing tool call with result
           setToolCalls(prev => prev.map(tc =>
             tc.id === toolCallId
-              ? { ...tc, result }
+              ? { ...tc, result, aiResponse: lastMessage.content }
               : tc
           ));
         }
@@ -281,7 +262,7 @@ const DemoPage: FC = () => {
 
     const handleError = (e: Error) => {
       const errorMessage = e?.message || 'An unknown error occurred';
-      addLog('Error', errorMessage, e);
+      logEvent('Error', errorMessage, e);
       setError(errorMessage);
       setIsSessionActive(false); // Assume call ends on error
     };
@@ -296,7 +277,7 @@ const DemoPage: FC = () => {
 
     // Cleanup function
     return () => {
-      addLog('Info', 'Cleaning up Vapi listeners');
+      logEvent('Info', 'Cleaning up Vapi listeners');
       vapi.off('call-start', handleCallStart);
       vapi.off('call-end', handleCallEnd);
       vapi.off('speech-start', handleSpeechStart);
@@ -309,26 +290,16 @@ const DemoPage: FC = () => {
          vapi.stop();
       }
     };
-  }, [publicKey, addLog]); // Rerun if publicKey changes
+  }, [publicKey, logEvent]); // Rerun if publicKey changes
 
   // Auto-scrolling effects
-  // Each one watches a specific state array and scrolls when it changes
   useEffect(() => {
-    // We need to scroll when transcript changes, so its dependency is required
     if (transcript.length > 0) {
       transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [transcript]);
 
   useEffect(() => {
-    // We need to scroll when logs changes, so its dependency is required
-    if (logs.length > 0) {
-      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [logs]);
-
-  useEffect(() => {
-    // We need to scroll when toolCalls changes, so its dependency is required
     if (toolCalls.length > 0) {
       toolCallsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
@@ -338,19 +309,19 @@ const DemoPage: FC = () => {
   const handleStartCall = async () => {
     if (!vapiInstance) {
       setError("Vapi SDK not initialized.");
-      addLog('Error', 'Attempted to start call before SDK initialization');
+      logEvent('Error', 'Attempted to start call before SDK initialization');
       return;
     }
     setError(null);
     setLastStatusUpdate('Starting Call...');
-    addLog('Action', 'Start Call button clicked');
+    logEvent('Action', 'Start Call button clicked');
     try {
       await vapiInstance.start(assistantId);
       // Status update will be handled by the 'call-start' event listener
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       setError(`Failed to start call: ${errorMsg}`);
-      addLog('Error', `Failed to start call: ${errorMsg}`, e);
+      logEvent('Error', `Failed to start call: ${errorMsg}`, e);
       setIsSessionActive(false);
       setLastStatusUpdate('Idle');
     }
@@ -360,14 +331,14 @@ const DemoPage: FC = () => {
     if (!vapiInstance) return;
     setError(null);
     setLastStatusUpdate('Stopping Call...');
-    addLog('Action', 'Stop Call button clicked');
+    logEvent('Action', 'Stop Call button clicked');
     try {
       await vapiInstance.stop();
       // Status update will be handled by the 'call-end' event listener
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       setError(`Failed to stop call: ${errorMsg}`);
-      addLog('Error', `Failed to stop call: ${errorMsg}`, e);
+      logEvent('Error', `Failed to stop call: ${errorMsg}`, e);
       // Force state update if event doesn't fire
       setIsSessionActive(false);
       setLastStatusUpdate('Idle');
@@ -379,7 +350,7 @@ const DemoPage: FC = () => {
     const newMutedState = !isMuted;
     vapiInstance.setMuted(newMutedState);
     setIsMuted(newMutedState);
-    addLog('Action', `Microphone ${newMutedState ? 'muted' : 'unmuted'}`);
+    logEvent('Action', `Microphone ${newMutedState ? 'muted' : 'unmuted'}`);
   };
 
   // Helper to format timestamp
@@ -450,8 +421,8 @@ const DemoPage: FC = () => {
         </div>
       )}
 
-      {/* Main Content Area (Transcript, Logs, Tool Calls) */}
-      <div className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 overflow-hidden">
+      {/* Main Content Area (Transcript and Tool Activity) - Changed to 2 columns */}
+      <div className="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 overflow-hidden">
         {/* Transcript */}
         <div className="flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <h2 className="text-lg font-semibold p-3 border-b border-gray-200 dark:border-gray-700 flex items-center">
@@ -473,52 +444,62 @@ const DemoPage: FC = () => {
           </div>
         </div>
 
-        {/* Logs */}
+        {/* Tool Activity Log - Simplified and Enhanced */}
         <div className="flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <h2 className="text-lg font-semibold p-3 border-b border-gray-200 dark:border-gray-700 flex items-center">
-            <Info className="mr-2 h-5 w-5" /> Event Log
+            <Settings2 className="mr-2 h-5 w-5" /> Tool Activity Log
           </h2>
-          <div className="flex-grow p-3 space-y-1 overflow-y-auto text-xs font-mono">
-            {logs.map((log) => (
-              <div key={log.id}>
-                <span className="text-gray-500 dark:text-gray-400">{log.timestamp}</span>
-                <span className={`ml-2 font-bold ${log.type === 'Error' ? 'text-red-500' : log.type === 'Info' ? 'text-blue-500' : 'text-green-500'}`}>
-                  [{log.type}]
-                </span>
-                <span className="ml-1">{log.message}</span>
-                {log.payload && <pre className="mt-1 p-1 bg-gray-100 dark:bg-gray-700 rounded text-xs overflow-x-auto">{log.payload}</pre>}
-              </div>
-            ))}
-            <div ref={logsEndRef} />
-          </div>
-        </div>
-
-        {/* Tool Calls */}
-        <div className="flex flex-col bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
-          <h2 className="text-lg font-semibold p-3 border-b border-gray-200 dark:border-gray-700 flex items-center">
-            <Settings2 className="mr-2 h-5 w-5" /> Tool Calls
-          </h2>
-          <div className="flex-grow p-3 space-y-2 overflow-y-auto text-xs">
+          <div className="flex-grow p-3 space-y-4 overflow-y-auto">
             {toolCalls.map((tc) => (
-              <div key={tc.id} className="p-2 border border-gray-200 dark:border-gray-700 rounded">
-                <p><span className="font-semibold">Name:</span> {tc.name}</p>
-                <p><span className="font-semibold">Time:</span> {formatTimestamp(tc.timestamp)}</p>
-                <p><span className="font-semibold">Params:</span></p>
-                <pre className="mt-1 p-1 bg-gray-100 dark:bg-gray-700 rounded text-xs overflow-x-auto">{JSON.stringify(tc.parameters, null, 2)}</pre>
-                {tc.result && (
-                  <>
-                    <p className="mt-1"><span className="font-semibold">Result:</span></p>
-                    <pre className="mt-1 p-1 bg-green-100 dark:bg-green-900 rounded text-xs overflow-x-auto">{tc.result}</pre>
-                  </>
-                )}
-                {tc.error && (
-                  <>
-                    <p className="mt-1"><span className="font-semibold text-red-500">Error:</span></p>
-                    <pre className="mt-1 p-1 bg-red-100 dark:bg-red-900 rounded text-xs overflow-x-auto">{tc.error}</pre>
-                  </>
+              <div key={tc.id} className="border border-gray-200 dark:border-gray-700 rounded overflow-hidden">
+                {/* Tool Call Header */}
+                <div className="bg-blue-50 dark:bg-blue-900 p-3 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-blue-700 dark:text-blue-300">Tool: {tc.name}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{formatTimestamp(tc.timestamp)}</span>
+                  </div>
+                </div>
+                
+                {/* Tool Request */}
+                <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+                  <p className="font-semibold text-sm mb-1">Request Parameters:</p>
+                  <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded overflow-x-auto">
+                    {JSON.stringify(tc.parameters, null, 2)}
+                  </pre>
+                </div>
+                
+                {/* Tool Response */}
+                <div className="p-3">
+                  <p className="font-semibold text-sm mb-1">Response:</p>
+                  {tc.result ? (
+                    <pre className="text-xs bg-green-50 dark:bg-green-900 p-2 rounded overflow-x-auto">
+                      {tc.result}
+                    </pre>
+                  ) : tc.error ? (
+                    <pre className="text-xs bg-red-50 dark:bg-red-900 text-red-600 dark:text-red-300 p-2 rounded overflow-x-auto">
+                      {tc.error}
+                    </pre>
+                  ) : (
+                    <div className="text-xs italic text-gray-500">Waiting for response...</div>
+                  )}
+                </div>
+                
+                {/* AI Response (if available) */}
+                {tc.aiResponse && (
+                  <div className="p-3 border-t border-gray-200 dark:border-gray-700 bg-purple-50 dark:bg-purple-900">
+                    <p className="font-semibold text-sm mb-1">AI Response:</p>
+                    <div className="text-xs p-2 rounded bg-white dark:bg-gray-800">
+                      {tc.aiResponse}
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
+            {toolCalls.length === 0 && (
+              <div className="text-center text-gray-500 dark:text-gray-400 italic p-4">
+                No tool activity yet. Have a conversation with Claire to see tool calls.
+              </div>
+            )}
             <div ref={toolCallsEndRef} />
           </div>
         </div>
