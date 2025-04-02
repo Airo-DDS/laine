@@ -3,12 +3,23 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Define standard appointment slots (30 minutes each, from 9am to 5pm)
+// Define standard appointment slots (30 minutes each, from 9am to 5pm Central Time)
 const APPOINTMENT_SLOTS = [
   '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
   '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', 
   '15:00', '15:30', '16:00', '16:30', '17:00'
 ];
+
+// Helper function to convert UTC to Central Time (America/Chicago)
+function convertToCentralTime(date: Date): Date {
+  // Create a string representation in America/Chicago timezone
+  const centralTimeStr = new Date(date).toLocaleString('en-US', {
+    timeZone: 'America/Chicago'
+  });
+  
+  // Parse this back to a Date object (in local time)
+  return new Date(centralTimeStr);
+}
 
 // Check if a date is a business day (Monday-Friday)
 function isBusinessDay(date: Date): boolean {
@@ -16,26 +27,31 @@ function isBusinessDay(date: Date): boolean {
   return day !== 0 && day !== 6; // 0 = Sunday, 6 = Saturday
 }
 
-// Validate if the appointment time is within business hours
+// Validate if the appointment time is within business hours (Central Time)
 function isValidAppointmentTime(dateTime: Date): { valid: boolean; message?: string } {
-  // Check if it's a business day
-  if (!isBusinessDay(dateTime)) {
+  // Convert UTC input to Central Time
+  const centralTime = convertToCentralTime(dateTime);
+  
+  // Check if it's a business day in Central Time
+  if (!isBusinessDay(centralTime)) {
     return { 
       valid: false, 
-      message: 'Appointments can only be scheduled Monday through Friday.'
+      message: 'Appointments can only be scheduled Monday through Friday in Central Time (CT).'
     };
   }
   
-  // Format the time part to check against allowed slots
-  const hours = dateTime.getUTCHours().toString().padStart(2, '0');
-  const minutes = dateTime.getUTCMinutes().toString().padStart(2, '0');
+  // Format the Central Time to check against allowed slots
+  const hours = centralTime.getHours().toString().padStart(2, '0');
+  const minutes = centralTime.getMinutes().toString().padStart(2, '0');
   const timeStr = `${hours}:${minutes}`;
   
-  // Check if the time matches an allowed slot
+  console.log(`Validating appointment time in Central Time: ${timeStr} against allowed slots:`, APPOINTMENT_SLOTS);
+  
+  // Check if the Central Time matches an allowed slot
   if (!APPOINTMENT_SLOTS.includes(timeStr)) {
     return { 
       valid: false, 
-      message: 'Appointments can only be scheduled between 9:00 AM and 5:00 PM in 30-minute intervals.'
+      message: `Appointments can only be scheduled between 9:00 AM and 5:00 PM Central Time (CT) in 30-minute intervals. Received: ${timeStr} CT`
     };
   }
   
@@ -87,6 +103,7 @@ export async function POST(request: Request) {
     // Validate that the appointment time is within business hours
     const timeValidation = isValidAppointmentTime(appointmentDate);
     if (!timeValidation.valid) {
+      console.error('Appointment validation failed:', timeValidation.message);
       return NextResponse.json(
         { error: timeValidation.message },
         { status: 400 }
@@ -117,6 +134,8 @@ export async function POST(request: Request) {
     return NextResponse.json(appointment);
   } catch (error) {
     console.error('Error creating appointment:', error);
-    return NextResponse.json({ error: 'Failed to create appointment' }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Detailed error:', errorMessage);
+    return NextResponse.json({ error: `Failed to create appointment: ${errorMessage}` }, { status: 500 });
   }
 } 

@@ -106,6 +106,13 @@ const CalendarPage = () => {
       // Combine date and time
       const dateTime = new Date(`${formData.date}T${formData.time}`);
       
+      // Check if date is a weekday (0 = Sunday, 6 = Saturday)
+      const day = dateTime.getDay();
+      if (day === 0 || day === 6) {
+        setError("Appointments can only be scheduled Monday through Friday.");
+        return;
+      }
+      
       let patientId = formData.patientId;
       
       // If new patient, create the patient first
@@ -163,7 +170,8 @@ const CalendarPage = () => {
       });
       
       if (!response.ok) {
-        throw new Error('Failed to create appointment');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create appointment');
       }
       
       // Close form and refresh data
@@ -261,6 +269,15 @@ const CalendarPage = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">New Appointment</h2>
+            
+            <div className="mb-4 p-4 bg-blue-50 rounded shadow-sm">
+              <h3 className="font-semibold text-blue-800 mb-2">Appointment Restrictions</h3>
+              <ul className="list-disc list-inside text-sm text-blue-700">
+                <li className="mb-1">Days: Monday through Friday only</li>
+                <li className="mb-1">Hours: 9:00 AM - 5:00 PM (Central Time - CT)</li>
+                <li className="mb-1">Duration: 30-minute slots only</li>
+              </ul>
+            </div>
             
             <form onSubmit={handleSubmit}>
               <div className="space-y-4">
@@ -452,10 +469,16 @@ const CalendarPage = () => {
                       <div>
                         <div className="flex items-center">
                           <span className="font-medium">
-                            {new Date(appointment.date).toLocaleTimeString('en-US', {
-                              hour: 'numeric',
-                              minute: '2-digit'
-                            })}
+                            {new Date(appointment.date).toLocaleString('en-US', {
+                              timeZone: 'America/Chicago',
+                              weekday: 'long',
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              hour12: true
+                            })} (CT)
                           </span>
                           <span className={`ml-2 px-2 py-0.5 text-xs rounded ${
                             appointment.status === 'CONFIRMED' ? 'bg-green-100 text-green-800' :

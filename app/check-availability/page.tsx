@@ -126,11 +126,11 @@ export default function CheckAvailability() {
           <h2 className="text-lg font-semibold mb-4">Enter Date Range</h2>
           
           <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-blue-700">
-            <p className="font-medium">Appointment Constraints:</p>
+            <p className="font-semibold">Appointment Constraints:</p>
             <ul className="list-disc list-inside mt-1 text-sm">
-              <li>Business hours: Monday-Friday, 9:00 AM - 5:00 PM (UTC)</li>
+              <li>Business hours: Monday-Friday, 9:00 AM - 5:00 PM (Central Time - CT)</li>
               <li>Appointments are scheduled in 30-minute slots</li>
-              <li>All times are in UTC timezone</li>
+              <li>All times are displayed in Central Time (Oklahoma, UTC-5)</li>
             </ul>
           </div>
           
@@ -229,8 +229,8 @@ export default function CheckAvailability() {
                   {currentAppointments.map((appointment) => (
                     <tr key={appointment.id}>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(appointment.date).toLocaleString(undefined, {
-                          timeZone: 'UTC',
+                        {new Date(appointment.date).toLocaleString('en-US', {
+                          timeZone: 'America/Chicago',
                           year: 'numeric',
                           month: '2-digit',
                           day: '2-digit',
@@ -239,7 +239,7 @@ export default function CheckAvailability() {
                           second: '2-digit',
                           hour12: false
                         })}
-                        <span className="text-xs text-gray-500 ml-2">(UTC)</span>
+                        <span className="text-xs text-gray-500 ml-2">(CT)</span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {appointment.patient.firstName} {appointment.patient.lastName}

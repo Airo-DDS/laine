@@ -79,38 +79,68 @@ const APPOINTMENT_SLOTS = [
   '15:00', '15:30', '16:00', '16:30', '17:00'
 ];
 
+// Helper function to convert date to Central Time
+function convertToCentralTime(date: Date): Date {
+  return new Date(date.toLocaleString('en-US', {
+    timeZone: 'America/Chicago'
+  }));
+}
+
+// Check if a date is in the past with buffer minutes
+function isDateInPast(date: Date, bufferMinutes = 15): boolean {
+  const now = new Date();
+  // Add buffer to allow slightly past dates
+  const bufferedDate = new Date(date.getTime() + bufferMinutes * 60 * 1000);
+  return bufferedDate < now;
+}
+
 // Check if a date is a business day (Monday-Friday)
 function isBusinessDay(date: Date): boolean {
   const day = date.getDay();
   return day !== 0 && day !== 6; // 0 = Sunday, 6 = Saturday
 }
 
-// Check if a date is in the past (with some buffer for processing)
-function isDateInPast(date: Date, bufferMinutes = 15): boolean {
-  const now = new Date();
-  // Add buffer minutes to allow for some flexibility
-  const bufferMs = bufferMinutes * 60 * 1000;
-  const bufferedDate = new Date(date.getTime() + bufferMs);
-  return bufferedDate < now;
+// Define an interface for appointment data
+interface Appointment {
+  date: Date;
+  id?: string;
+  patientId?: string;
+  status?: string;
+  patient?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  // Add other fields as needed
 }
 
-// Convert UTC date to Pacific Time (dental practice timezone)
-function convertToPacificTime(utcDate: Date): Date {
-  // Create formatter for Pacific Time
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/Los_Angeles',
-    year: 'numeric', 
-    month: 'numeric', 
-    day: 'numeric',
-    hour: 'numeric', 
-    minute: 'numeric', 
-    second: 'numeric',
-    hour12: false
-  });
+// Find available appointment slots for a given date
+function findAvailableSlots(date: Date, existingAppointments: Appointment[]): string[] {
+  // Convert input date to Central Time for business hour validation
+  const centralDate = convertToCentralTime(date);
   
-  // Format the date in Pacific Time
-  const pacificTimeStr = formatter.format(utcDate);
-  return new Date(pacificTimeStr);
+  // Define standard appointment slots (30 minutes each, from 9am to 5pm Central Time)
+  const APPOINTMENT_SLOTS = [
+    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', 
+    '15:00', '15:30', '16:00', '16:30', '17:00'
+  ];
+  
+  // If not a business day in Central Time, no slots available
+  if (!isBusinessDay(centralDate)) {
+    return [];
+  }
+  
+  // Filter out slots that already have appointments
+  const bookedTimes = existingAppointments.map(appt => 
+    new Date(appt.date).toLocaleTimeString('en-US', {
+      timeZone: 'America/Chicago',
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false
+    })
+  );
+  
+  return APPOINTMENT_SLOTS.filter(slot => !bookedTimes.includes(slot));
 }
 
 // Format date for response
@@ -124,7 +154,7 @@ function formatDate(isoString: string): string {
 }
 
 // Generate all possible slots for a date range
-async function findAvailableSlots(startDate: Date, endDate: Date): Promise<string[]> {
+async function findAvailableSlotsForRange(startDate: Date, endDate: Date, existingAppointments: Appointment[]): Promise<string[]> {
   logDebug('Finding available slots', { 
     startDate: startDate.toISOString(), 
     endDate: endDate.toISOString(),
@@ -146,7 +176,7 @@ async function findAvailableSlots(startDate: Date, endDate: Date): Promise<strin
 
   try {
     // Get all appointments within the date range
-    const existingAppointments = await prisma.appointment.findMany({
+    const existingAppointmentsInRange = await prisma.appointment.findMany({
       where: {
         date: {
           gte: startDateCopy,
@@ -161,11 +191,11 @@ async function findAvailableSlots(startDate: Date, endDate: Date): Promise<strin
       }
     });
     
-    logDebug(`Found ${existingAppointments.length} existing appointments in range`);
+    logDebug(`Found ${existingAppointmentsInRange.length} existing appointments in range`);
     
     // Create a map of booked slots
     const bookedSlots = new Set(
-      existingAppointments.map(apt => apt.date.toISOString())
+      existingAppointmentsInRange.map(apt => apt.date.toISOString())
     );
     
     const availableSlots: string[] = [];
@@ -182,7 +212,7 @@ async function findAvailableSlots(startDate: Date, endDate: Date): Promise<strin
           const slotDateTime = new Date(`${dateStr}T${timeSlot}:00`);
           
           // Skip slots in the past
-          if (isDateInPast(slotDateTime)) {
+          if (isDateInPast(slotDateTime, 15)) {
             continue;
           }
           
@@ -343,6 +373,30 @@ function getAlternativeTimesMessage(availableSlots: string[], referenceTime?: Da
   return `${response}Would any of these times work for you?`;
 }
 
+// Format the result in a human-readable way
+function formatResponseForHuman(date: Date, slots: string[]): string {
+  // Format date for display in Central Time
+  const formattedDate = date.toLocaleDateString('en-US', {
+    timeZone: 'America/Chicago',
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  
+  if (slots.length === 0) {
+    return `No available appointment slots on ${formattedDate} (Central Time).`;
+  }
+  
+  // Format slots for display
+  const formattedSlots = slots.map(slot => {
+    const [hours, minutes] = slot.split(':');
+    return `${hours}:${minutes}`;
+  });
+  
+  return `Available appointment slots on ${formattedDate} (Central Time): ${formattedSlots.join(', ')}`;
+}
+
 // Define CORS headers for development/testing
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -500,12 +554,12 @@ export async function POST(request: Request) {
     // Generate all available slots for the given date range or next 7 days
     let availableSlots: string[] = [];
     if (startDate && endDate) {
-      availableSlots = await findAvailableSlots(new Date(startDate), new Date(endDate));
+      availableSlots = await findAvailableSlotsForRange(new Date(startDate), new Date(endDate), existingAppointments);
     } else {
       // Default to next 7 days if no specific dates provided
       const nextWeek = new Date();
       nextWeek.setDate(nextWeek.getDate() + 7);
-      availableSlots = await findAvailableSlots(new Date(), nextWeek);
+      availableSlots = await findAvailableSlotsForRange(new Date(), nextWeek, existingAppointments);
     }
 
     // Format available slots for AI context
