@@ -175,7 +175,7 @@ export async function POST(request: Request) {
     }
 
     // Parse the request body
-    const body = await request.json();
+    const body = await request.json() as VapiToolCall | { startDate: string; endDate: string };
     console.log('Received request body:', JSON.stringify(body, null, 2));
 
     // Extract toolCallId and parameters
@@ -183,21 +183,22 @@ export async function POST(request: Request) {
     let startDate: string;
     let endDate: string;
 
-    if ('id' in body) {
+    if ('id' in body && 'type' in body && body.type === 'function') {
       // Handle VAPI tool call format
-      toolCallId = body.id;
+      const vapiBody = body as VapiToolCall;
+      toolCallId = vapiBody.id;
       console.log('Processing VAPI tool call with ID:', toolCallId);
       
       // Parse parameters from function arguments
-      if (typeof body.function?.arguments === 'string') {
-        console.log('Parsing function arguments:', body.function.arguments);
-        const args = JSON.parse(body.function.arguments) as { startDate: string; endDate: string };
+      if (typeof vapiBody.function?.arguments === 'string') {
+        console.log('Parsing function arguments:', vapiBody.function.arguments);
+        const args = JSON.parse(vapiBody.function.arguments) as { startDate: string; endDate: string };
         startDate = args.startDate;
         endDate = args.endDate;
         console.log('Parsed dates:', { startDate, endDate });
-      } else if (body.function?.parameters) {
+      } else if (vapiBody.function?.parameters) {
         console.log('Using direct parameters');
-        const params = body.function.parameters;
+        const params = vapiBody.function.parameters;
         if (!params.startDate || !params.endDate) {
           console.log('Missing required parameters');
           return NextResponse.json({
@@ -223,8 +224,9 @@ export async function POST(request: Request) {
       // Handle direct API call format
       console.log('Processing direct API call');
       toolCallId = 'direct-call';
-      startDate = body.startDate;
-      endDate = body.endDate;
+      const directBody = body as { startDate: string; endDate: string };
+      startDate = directBody.startDate;
+      endDate = directBody.endDate;
     }
 
     // Validate required parameters
