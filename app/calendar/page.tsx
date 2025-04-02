@@ -60,10 +60,14 @@ const CalendarPage = () => {
   
   const router = useRouter();
 
-  // Time slots from 9am to 5pm with 30-minute intervals
+  // Time slots for the entire day with 30-minute intervals (24/7 for demo)
   const timeSlots = [
-    '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30',
-    '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00'
+    '00:00', '00:30', '01:00', '01:30', '02:00', '02:30', '03:00', '03:30', 
+    '04:00', '04:30', '05:00', '05:30', '06:00', '06:30', '07:00', '07:30', 
+    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
+    '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
+    '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', 
+    '20:00', '20:30', '21:00', '21:30', '22:00', '22:30', '23:00', '23:30'
   ];
 
   // Load appointments and patients
@@ -106,12 +110,12 @@ const CalendarPage = () => {
       // Combine date and time
       const dateTime = new Date(`${formData.date}T${formData.time}`);
       
-      // Check if date is a weekday (0 = Sunday, 6 = Saturday)
-      const day = dateTime.getDay();
-      if (day === 0 || day === 6) {
-        setError("Appointments can only be scheduled Monday through Friday.");
-        return;
-      }
+      // Remove weekend check for demo purposes
+      // const day = dateTime.getDay();
+      // if (day === 0 || day === 6) {
+      //   setError("Appointments can only be scheduled Monday through Friday.");
+      //   return;
+      // }
       
       let patientId = formData.patientId;
       
@@ -272,10 +276,11 @@ const CalendarPage = () => {
             
             <div className="mb-4 p-4 bg-blue-50 rounded shadow-sm">
               <h3 className="font-semibold text-blue-800 mb-2">Appointment Restrictions</h3>
-              <ul className="list-disc list-inside text-sm text-blue-700">
-                <li className="mb-1">Days: Monday through Friday only</li>
-                <li className="mb-1">Hours: 9:00 AM - 5:00 PM (Central Time - CT)</li>
-                <li className="mb-1">Duration: 30-minute slots only</li>
+              <p className="font-medium text-sm mb-2">Appointment Restrictions:</p>
+              <ul className="list-disc list-inside text-xs pl-2">
+                <li className="mb-1">Hours: 24/7 - ANY day, ANY time (for demo purposes)</li>
+                <li className="mb-1">Appointments are scheduled in 30-minute slots</li>
+                <li>All times are displayed in your local timezone</li>
               </ul>
             </div>
             

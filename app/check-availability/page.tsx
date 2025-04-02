@@ -128,9 +128,9 @@ export default function CheckAvailability() {
           <div className="mb-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-blue-700">
             <p className="font-semibold">Appointment Constraints:</p>
             <ul className="list-disc list-inside mt-1 text-sm">
-              <li>Business hours: Monday-Friday, 9:00 AM - 5:00 PM (Central Time - CT)</li>
+              <li>Business hours: 24/7 - ANY day, ANY time (for demo purposes)</li>
               <li>Appointments are scheduled in 30-minute slots</li>
-              <li>All times are displayed in Central Time (Oklahoma, UTC-5)</li>
+              <li>All times are displayed in your local timezone</li>
             </ul>
           </div>
           
