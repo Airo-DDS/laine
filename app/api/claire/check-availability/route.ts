@@ -16,6 +16,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Day of week mapping for date calculations
+const DAYS_OF_WEEK = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+];
+
+// Helper to find the next occurrence of a day of the week
+function getNextDayOfWeek(dayName: string, fromDate = new Date()): Date {
+  const targetDay = DAYS_OF_WEEK.findIndex(
+    day => day.toLowerCase() === dayName.toLowerCase()
+  );
+  
+  if (targetDay === -1) return fromDate; // Invalid day name
+  
+  const today = fromDate.getDay();
+  const daysToAdd = (targetDay + 7 - today) % 7;
+  
+  const result = new Date(fromDate);
+  result.setDate(result.getDate() + (daysToAdd === 0 ? 7 : daysToAdd));
+  return result;
+}
+
 // More specific types for arguments
 type FunctionArguments = {
   startDate?: string;
@@ -56,38 +77,88 @@ type RequestBody = {
 // Process date to ensure it's valid and in the future
 function processRequestDate(dateString: string): Date {
   const currentTime = new Date();
-  const currentYear = currentTime.getFullYear();
-  let requestedTime: Date;
   
   // Create a date object from the string
   const parsedDate = new Date(dateString);
   
   // Check if date string is a valid ISO format date
   if (!Number.isNaN(parsedDate.getTime())) {
-    requestedTime = parsedDate;
+    // Extract the day of week from the parsed date
+    const dayOfWeek = DAYS_OF_WEEK[parsedDate.getDay()];
     
-    // If date is in the past, try to fix the year
-    if (requestedTime < currentTime) {
-      // First try current year
-      requestedTime.setFullYear(currentYear);
-      
-      // If still in the past, try next year
-      if (requestedTime < currentTime) {
-        requestedTime.setFullYear(currentYear + 1);
-      }
-      
-      log('Updated date year to ensure it is in the future', {
-        originalDate: dateString,
-        updatedDate: requestedTime.toISOString()
-      });
-    }
+    log('Parsed date information', {
+      originalDate: dateString,
+      parsedDate: parsedDate.toISOString(),
+      dayOfWeek
+    });
     
-    return requestedTime;
+    // Always use the NEXT occurrence of that day of week from today
+    const correctDayOfWeekDate = getNextDayOfWeek(dayOfWeek, currentTime);
+    
+    // Keep the time from the original parsed date
+    correctDayOfWeekDate.setHours(parsedDate.getHours());
+    correctDayOfWeekDate.setMinutes(parsedDate.getMinutes());
+    correctDayOfWeekDate.setSeconds(parsedDate.getSeconds());
+    
+    log('Corrected to next occurrence of day of week', {
+      originalDate: dateString,
+      correctedDate: correctDayOfWeekDate.toISOString(),
+      dayOfWeek
+    });
+    
+    return correctDayOfWeekDate;
   }
   
   // If we get here, the date string was not valid ISO format
-  // For demo purposes, return the current date plus 1 day at 3:00 PM
-  log('Invalid date format, using tomorrow at 3PM as fallback', { 
+  // Try to extract day name and time if string contains day reference
+  const dayPatterns = [
+    { day: 'monday', regex: /\b(mon|monday)\b/i },
+    { day: 'tuesday', regex: /\b(tue|tues|tuesday)\b/i },
+    { day: 'wednesday', regex: /\b(wed|weds|wednesday)\b/i },
+    { day: 'thursday', regex: /\b(thu|thur|thurs|thursday)\b/i },
+    { day: 'friday', regex: /\b(fri|friday)\b/i },
+    { day: 'saturday', regex: /\b(sat|saturday)\b/i },
+    { day: 'sunday', regex: /\b(sun|sunday)\b/i },
+  ];
+  
+  // Check if string contains day reference
+  for (const { day, regex } of dayPatterns) {
+    if (regex.test(dateString)) {
+      // Extract time if available (assuming format like "3pm" or "3:00pm")
+      const timeMatch = dateString.match(/(\d{1,2})(?::(\d{2}))?(?:\s*)(am|pm)/i);
+      
+      const nextDayDate = getNextDayOfWeek(day, currentTime);
+      
+      // If time was extracted, set it
+      if (timeMatch) {
+        const hours = Number.parseInt(timeMatch[1], 10);
+        const minutes = timeMatch[2] ? Number.parseInt(timeMatch[2], 10) : 0;
+        const isPM = timeMatch[3].toLowerCase() === 'pm';
+        
+        // Convert to 24-hour format
+        const adjustedHours = isPM && hours < 12 
+          ? hours + 12 
+          : (!isPM && hours === 12 ? 0 : hours);
+        
+        nextDayDate.setHours(adjustedHours, minutes, 0, 0);
+      } else {
+        // Default to 3PM if no time specified
+        nextDayDate.setHours(15, 0, 0, 0);
+      }
+      
+      log('Extracted day reference and created date', {
+        originalText: dateString,
+        extractedDay: day,
+        extractedTime: timeMatch ? `${timeMatch[1]}:${timeMatch[2] || '00'} ${timeMatch[3]}` : 'default 3:00 PM',
+        resultDate: nextDayDate.toISOString()
+      });
+      
+      return nextDayDate;
+    }
+  }
+  
+  // For demo purposes, use tomorrow at 3:00 PM as fallback
+  log('Could not parse date reference, using tomorrow at 3PM as fallback', { 
     originalDate: dateString
   });
   
@@ -97,8 +168,21 @@ function processRequestDate(dateString: string): Date {
   return fallbackDate;
 }
 
+// Get current date info for debugging and reference
+function getCurrentDateInfo(): Record<string, string> {
+  const now = new Date();
+  return {
+    currentDateTime: now.toISOString(),
+    currentDateUTC: now.toUTCString(),
+    currentDateLocale: now.toLocaleString(),
+    currentDayOfWeek: DAYS_OF_WEEK[now.getDay()],
+    nextWednesday: getNextDayOfWeek('wednesday', now).toISOString(),
+  };
+}
+
 export async function POST(request: Request) {
   log('Received check-availability request');
+  log('Current date info', getCurrentDateInfo());
   
   // Handle preflight request
   if (request.method === 'OPTIONS') {
