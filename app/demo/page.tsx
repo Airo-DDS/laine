@@ -3,7 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { FC } from 'react';
 // Assuming VapiImpl is the correct import name from the SDK
-import { default as VapiImpl } from '@vapi-ai/web'; 
+import { default as VapiImpl } from '@vapi-ai/web';
+// Log SDK import status
+console.log('Vapi SDK imported:', { 
+  sdk: typeof VapiImpl === 'function' ? 'Function' : typeof VapiImpl,
+  constructor: VapiImpl?.toString?.().substring(0, 100) || 'Not available'
+});
 // Import specific types from the SDK if available, otherwise define interfaces
 // Example: import type { VapiEventMessage, ToolCall, ToolCallResult } from '@vapi-ai/web'; 
 import { 
@@ -308,175 +313,187 @@ const DemoPage: FC = () => {
     }
     
     console.log('Initializing Vapi SDK...');
-    const vapiInstance = new VapiImpl(publicKey);
-    vapiRef.current = vapiInstance;
-    addEventLog('SDK', 'Initialized', <Zap size={14} className="text-purple-500"/>);
+    try {
+      const vapiInstance = new VapiImpl(publicKey);
+      console.log('Vapi instance created successfully');
+      vapiRef.current = vapiInstance;
+      addEventLog('SDK', 'Initialized', <Zap size={14} className="text-purple-500"/>);
 
-    // --- Event Listeners ---
-    vapiInstance.on('call-start', () => {
-      console.log('Event: call-start');
-      setCallStatus('Connected');
-      setIsSessionActive(true);
-      setTranscript('Call started...\n'); 
-      setFunctionCalls([]); 
-      setEventLog([]); 
-      addEventLog('Call', 'Started', <PhoneOff size={14} className="text-green-500" />);
-      addToast({ type: 'success', title: 'Call Started', message: 'Connected to Claire.' });
-    });
+      // --- Event Listeners ---
+      vapiInstance.on('call-start', () => {
+        console.log('Event: call-start');
+        setCallStatus('Connected');
+        setIsSessionActive(true);
+        setTranscript('Call started...\n'); 
+        setFunctionCalls([]); 
+        setEventLog([]); 
+        addEventLog('Call', 'Started', <PhoneOff size={14} className="text-green-500" />);
+        addToast({ type: 'success', title: 'Call Started', message: 'Connected to Claire.' });
+      });
 
-    vapiInstance.on('call-end', (endDetails?: { reason?: string }) => {
-      console.log('Event: call-end', endDetails);
-      const reason = endDetails?.reason || 'Unknown reason';
-      setCallStatus(`Call Ended: ${reason}`);
-      setIsSessionActive(false);
-      setAssistantIsSpeaking(false);
-      setVolumeLevel(0);
-      addEventLog('Call', `Ended (${reason})`, <LogOut size={14} className="text-red-500" />);
-      addToast({ type: 'info', title: 'Call Ended', message: `Reason: ${reason}`, duration: 8000 });
-    });
+      vapiInstance.on('call-end', (endDetails?: { reason?: string }) => {
+        console.log('Event: call-end', endDetails);
+        const reason = endDetails?.reason || 'Unknown reason';
+        setCallStatus(`Call Ended: ${reason}`);
+        setIsSessionActive(false);
+        setAssistantIsSpeaking(false);
+        setVolumeLevel(0);
+        addEventLog('Call', `Ended (${reason})`, <LogOut size={14} className="text-red-500" />);
+        addToast({ type: 'info', title: 'Call Ended', message: `Reason: ${reason}`, duration: 8000 });
+      });
 
-    vapiInstance.on('speech-start', () => {
-      console.log('Event: speech-start (Assistant)');
-      setAssistantIsSpeaking(true);
-      addEventLog('Speech', 'Assistant started speaking', <Ear size={14} className="text-blue-500" />);
-    });
+      vapiInstance.on('speech-start', () => {
+        console.log('Event: speech-start (Assistant)');
+        setAssistantIsSpeaking(true);
+        addEventLog('Speech', 'Assistant started speaking', <Ear size={14} className="text-blue-500" />);
+      });
 
-    vapiInstance.on('speech-end', () => {
-      console.log('Event: speech-end (Assistant)');
-      setAssistantIsSpeaking(false);
-      addEventLog('Speech', 'Assistant stopped speaking', <EarOff size={14} className="text-gray-500" />);
-    });
+      vapiInstance.on('speech-end', () => {
+        console.log('Event: speech-end (Assistant)');
+        setAssistantIsSpeaking(false);
+        addEventLog('Speech', 'Assistant stopped speaking', <EarOff size={14} className="text-gray-500" />);
+      });
 
-    vapiInstance.on('volume-level', (level: number) => {
-      setVolumeLevel(level);
-    });
+      vapiInstance.on('volume-level', (level: number) => {
+        setVolumeLevel(level);
+      });
 
-    vapiInstance.on('message', (msg: {
-      type: string;
-      transcript?: string;
-      transcriptType?: string;
-      role?: string;
-      toolCallList?: VapiToolCall[];
-      toolCallResult?: VapiToolCallResult;
-      status?: string;
-    }) => { 
-      console.log('Event: message', msg);
-      
-      switch (msg.type) {
-        case 'transcript':
-          if (msg.transcriptType === 'final' && msg.transcript) {
-            const speaker = msg.role === 'assistant' ? 'Assistant' : 'User';
-            setTranscript(prev => `${prev}\n${speaker}: ${msg.transcript}`);
-            addEventLog('Transcript', `${speaker} (Final): "${msg.transcript.substring(0, 50)}..."`, <MessageSquareText size={14} />);
-          }
-          break;
-          
-        case 'tool-calls': // Updated event name
-          if (msg.toolCallList && Array.isArray(msg.toolCallList)) {
-            for (const toolCall of msg.toolCallList) {
-              if (toolCall.function) {
-                const { name, arguments: argsString } = toolCall.function;
-                let parameters = {};
-                try {
-                  parameters = JSON.parse(argsString || '{}');
-                } catch (e) { console.error("Failed to parse tool arguments:", argsString); }
+      vapiInstance.on('message', (msg: {
+        type: string;
+        transcript?: string;
+        transcriptType?: string;
+        role?: string;
+        toolCallList?: VapiToolCall[];
+        toolCallResult?: VapiToolCallResult;
+        status?: string;
+      }) => {
+        console.log('Event: message', msg);
+        
+        switch (msg.type) {
+          case 'transcript':
+            if (msg.transcriptType === 'final' && msg.transcript) {
+              const speaker = msg.role === 'assistant' ? 'Assistant' : 'User';
+              setTranscript(prev => `${prev}\n${speaker}: ${msg.transcript}`);
+              addEventLog('Transcript', `${speaker} (Final): "${msg.transcript.substring(0, 50)}..."`, <MessageSquareText size={14} />);
+            }
+            break;
+            
+          case 'tool-calls': // Updated event name
+            if (msg.toolCallList && Array.isArray(msg.toolCallList)) {
+              for (const toolCall of msg.toolCallList) {
+                if (toolCall.function) {
+                  const { name, arguments: argsString } = toolCall.function;
+                  let parameters = {};
+                  try {
+                    parameters = JSON.parse(argsString || '{}');
+                  } catch (e) { console.error("Failed to parse tool arguments:", argsString); }
 
-                const newCall: FunctionCall = {
-                  id: toolCall.id, // Use the ID from Vapi
-                  name,
-                  parameters,
-                  timestamp: new Date(),
-                  pending: true
-                };
-                setFunctionCalls(prev => [...prev, newCall]);
-                setTranscript(prev => `${prev}\n[Tool Call Requested] ${name}(${formatJsonForDisplay(parameters)})`);
-                addEventLog('Tool', `Calling: ${name}`, <Zap size={14} className="text-yellow-500" />);
-                addToast({ type: 'info', title: `Calling Tool: ${name}`, message: `Params: ${formatJsonForDisplay(parameters)}` });
+                  const newCall: FunctionCall = {
+                    id: toolCall.id, // Use the ID from Vapi
+                    name,
+                    parameters,
+                    timestamp: new Date(),
+                    pending: true
+                  };
+                  setFunctionCalls(prev => [...prev, newCall]);
+                  setTranscript(prev => `${prev}\n[Tool Call Requested] ${name}(${formatJsonForDisplay(parameters)})`);
+                  addEventLog('Tool', `Calling: ${name}`, <Zap size={14} className="text-yellow-500" />);
+                  addToast({ type: 'info', title: `Calling Tool: ${name}`, message: `Params: ${formatJsonForDisplay(parameters)}` });
+                }
               }
             }
-          }
-          break;
-          
-        case 'tool-calls-result': // Updated event name
-          if (msg.toolCallResult) {
-            const resultData = msg.toolCallResult as VapiToolCallResult;
-            const toolCallId = resultData.toolCallId;
+            break;
             
-            // Use functional update to get the latest state
-            setFunctionCalls(prevCalls => {
-              const callIndex = prevCalls.findIndex(call => call.id === toolCallId);
-              if (callIndex === -1) return prevCalls; // Call not found (shouldn't happen often)
-
-              const updatedCall = { 
-                ...prevCalls[callIndex], 
-                pending: false, 
-                result: resultData.result, 
-                error: resultData.error 
-              };
+          case 'tool-calls-result': // Updated event name
+            if (msg.toolCallResult) {
+              const resultData = msg.toolCallResult as VapiToolCallResult;
+              const toolCallId = resultData.toolCallId;
               
-              const newCalls = [...prevCalls];
-              newCalls[callIndex] = updatedCall;
+              // Use functional update to get the latest state
+              setFunctionCalls(prevCalls => {
+                const callIndex = prevCalls.findIndex(call => call.id === toolCallId);
+                if (callIndex === -1) return prevCalls; // Call not found (shouldn't happen often)
 
-              // Log and Toast based on the *updated* call info
-              const functionName = updatedCall.name || 'Unknown Function';
-              setTranscript(prev => 
-                `${prev}\n[Tool Result] ${functionName}: ${resultData.result || resultData.error || 'Unknown'}`
-              );
-              
-              if (resultData.error) {
-                addEventLog('Tool', `Error: ${functionName} - ${resultData.error}`, <AlertCircle size={14} className="text-red-500" />);
-                addToast({ type: 'error', title: `Tool Error: ${functionName}`, message: resultData.error });
-              } else {
-                addEventLog('Tool', `Result: ${functionName}`, <CheckCircle size={14} className="text-green-500" />);
-                addToast({ type: 'success', title: `Tool Result: ${functionName}`, message: formatJsonForDisplay(resultData.result) });
-              }
+                const updatedCall = { 
+                  ...prevCalls[callIndex], 
+                  pending: false, 
+                  result: resultData.result, 
+                  error: resultData.error 
+                };
+                
+                const newCalls = [...prevCalls];
+                newCalls[callIndex] = updatedCall;
 
-              return newCalls;
-            });
-          }
-          break;
+                // Log and Toast based on the *updated* call info
+                const functionName = updatedCall.name || 'Unknown Function';
+                setTranscript(prev => 
+                  `${prev}\n[Tool Result] ${functionName}: ${resultData.result || resultData.error || 'Unknown'}`
+                );
+                
+                if (resultData.error) {
+                  addEventLog('Tool', `Error: ${functionName} - ${resultData.error}`, <AlertCircle size={14} className="text-red-500" />);
+                  addToast({ type: 'error', title: `Tool Error: ${functionName}`, message: resultData.error });
+                } else {
+                  addEventLog('Tool', `Result: ${functionName}`, <CheckCircle size={14} className="text-green-500" />);
+                  addToast({ type: 'success', title: `Tool Result: ${functionName}`, message: formatJsonForDisplay(resultData.result) });
+                }
 
-        case 'status-update':
-          if (msg.status) {
-            setCallStatus(`Status: ${msg.status}`);
-            addEventLog('Call Status', msg.status, <Activity size={14} className="text-purple-500" />);
-          }
-          break;
+                return newCalls;
+              });
+            }
+            break;
 
-        case 'user-interrupted':
-          console.log('User interrupted assistant');
-          addEventLog('Interaction', 'User interrupted', <MicOff size={14} className="text-orange-500" />);
-          addToast({ type: 'warning', title: 'Interruption', message: 'You interrupted the assistant.', duration: 3000 });
-          break;
-          
-        case 'hang':
-           console.log('Assistant hang detected');
-           addEventLog('System', 'Assistant hang detected', <Loader2 size={14} className="text-yellow-500 animate-spin" />);
-           addToast({ type: 'warning', title: 'Assistant Delayed', message: 'The assistant is taking a moment to respond.', duration: 4000 });
-           break;
-          
-        default:
-          // Log other potentially useful messages
-          addEventLog(msg.type, JSON.stringify(msg), <Info size={14} className="text-gray-400" />);
-          console.log(`Unhandled message type: ${msg.type}`);
-      }
-    });
+          case 'status-update':
+            if (msg.status) {
+              setCallStatus(`Status: ${msg.status}`);
+              addEventLog('Call Status', msg.status, <Activity size={14} className="text-purple-500" />);
+            }
+            break;
 
-    vapiInstance.on('error', (e: Error) => {
-      console.error('VAPI Error:', e);
-      setCallStatus(`Error: ${e.message}`);
-      setIsSessionActive(false); // Ensure session is marked inactive on error
-      addEventLog('Error', e.message, <AlertCircle size={14} className="text-red-500" />);
-      addToast({ type: 'error', title: 'Call Error', message: e.message, duration: 8000 });
-    });
+          case 'user-interrupted':
+            console.log('User interrupted assistant');
+            addEventLog('Interaction', 'User interrupted', <MicOff size={14} className="text-orange-500" />);
+            addToast({ type: 'warning', title: 'Interruption', message: 'You interrupted the assistant.', duration: 3000 });
+            break;
+            
+          case 'hang':
+             console.log('Assistant hang detected');
+             addEventLog('System', 'Assistant hang detected', <Loader2 size={14} className="text-yellow-500 animate-spin" />);
+             addToast({ type: 'warning', title: 'Assistant Delayed', message: 'The assistant is taking a moment to respond.', duration: 4000 });
+             break;
+            
+          default:
+            // Log other potentially useful messages
+            addEventLog(msg.type, JSON.stringify(msg), <Info size={14} className="text-gray-400" />);
+            console.log(`Unhandled message type: ${msg.type}`);
+        }
+      });
 
-    // Cleanup
-    return () => {
-      console.log('Cleaning up Vapi instance...');
-      vapiInstance.stop();
-      vapiRef.current = null;
-      // Don't add log here as state might be unmounted
-    };
+      vapiInstance.on('error', (e: Error) => {
+        console.error('VAPI Error:', e);
+        setCallStatus(`Error: ${e.message}`);
+        setIsSessionActive(false); // Ensure session is marked inactive on error
+        addEventLog('Error', e.message, <AlertCircle size={14} className="text-red-500" />);
+        addToast({ type: 'error', title: 'Call Error', message: e.message, duration: 8000 });
+      });
+
+      // Cleanup
+      return () => {
+        console.log('Cleaning up Vapi instance...');
+        vapiInstance.stop();
+        vapiRef.current = null;
+        // Don't add log here as state might be unmounted
+      };
+    } catch (err) {
+      console.error('Failed to initialize Vapi SDK:', err);
+      setCallStatus('Error: Failed to initialize Vapi SDK');
+      addToast({ 
+        type: 'error', 
+        title: 'SDK Initialization Error', 
+        message: err instanceof Error ? err.message : String(err) 
+      });
+      return;
+    }
   // Dependencies: Only run once on mount, include stable functions
   }, [publicKey, addToast, addEventLog, formatJsonForDisplay]); 
 
@@ -495,23 +512,41 @@ const DemoPage: FC = () => {
         addEventLog('Permission', 'Microphone access granted', <Mic size={14} className="text-green-500" />);
         setCallStatus('Initializing Call...');
         
-        const assistantOverrides = {
-          recordingEnabled: true, 
-          variableValues: { name: 'Demo User' },
-        };
-        
-        console.log('Starting call with Assistant ID:', assistantId, 'Overrides:', assistantOverrides);
+        console.log('Starting call with minimal parameters');
         addToast({ type: 'info', title: 'Starting Call', message: 'Connecting...', duration: 3000 });
 
-        vapiRef.current?.start(assistantId, assistantOverrides)
-          .catch((e) => {
-            console.error("Failed to start call:", e);
-            const errorMessage = e instanceof Error ? e.message : String(e);
-            setCallStatus(`Error starting call: ${errorMessage}`);
-            setIsSessionActive(false);
-            addEventLog('Error', `Call start failed: ${errorMessage}`, <AlertCircle size={14} className="text-red-500" />);
-            addToast({ type: 'error', title: 'Call Start Failed', message: errorMessage, duration: 8000 });
-          });
+        // Make sure vapiRef.current exists
+        if (!vapiRef.current) {
+          const errorMessage = 'Vapi instance not initialized';
+          setCallStatus(`Error starting call: ${errorMessage}`);
+          setIsSessionActive(false);
+          addEventLog('Error', `Call start failed: ${errorMessage}`, <AlertCircle size={14} className="text-red-500" />);
+          addToast({ type: 'error', title: 'Call Start Failed', message: errorMessage, duration: 8000 });
+          return;
+        }
+
+        try {
+          // Start the call with minimal parameters - just the assistant ID
+          console.log('Starting call with minimal parameters');
+          
+          // Start the call with proper error handling
+          vapiRef.current.start(assistantId)
+            .catch((e) => {
+              console.error("Failed to start call:", e);
+              const errorMessage = e instanceof Error ? e.message : String(e);
+              setCallStatus(`Error starting call: ${errorMessage}`);
+              setIsSessionActive(false);
+              addEventLog('Error', `Call start failed: ${errorMessage}`, <AlertCircle size={14} className="text-red-500" />);
+              addToast({ type: 'error', title: 'Call Start Failed', message: errorMessage, duration: 8000 });
+            });
+        } catch (error) {
+          console.error("Exception during call start:", error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          setCallStatus(`Error starting call: ${errorMessage}`);
+          setIsSessionActive(false);
+          addEventLog('Error', `Call start exception: ${errorMessage}`, <AlertCircle size={14} className="text-red-500" />);
+          addToast({ type: 'error', title: 'Call Start Failed', message: errorMessage, duration: 8000 });
+        }
       })
       .catch(err => {
         console.error("Microphone permission error:", err);
