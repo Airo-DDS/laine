@@ -197,17 +197,6 @@ export async function POST(request: Request) {
     
     log('Retrieved appointments', { count: appointments.length });
     
-    // Format the date for display
-    const formattedDate = requestedTime.toLocaleString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      timeZone: 'America/Chicago',
-    });
-    
     // Find if there's a conflicting appointment
     const conflictingAppointment = appointments.find(appointment => {
       const appointmentTime = new Date(appointment.date);
@@ -216,11 +205,47 @@ export async function POST(request: Request) {
       return timeDiffMs < 30 * 60 * 1000;
     });
     
+    // Generate alternative times for unavailable slots
+    function getAlternativeTimes(baseTime: Date): string[] {
+      const alternatives = [];
+      
+      // Next day, same time
+      const nextDay = new Date(baseTime);
+      nextDay.setDate(nextDay.getDate() + 1);
+      alternatives.push(nextDay.toLocaleString('en-US', {
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      }));
+      
+      // Same day, 2 hours later
+      const laterTime = new Date(baseTime);
+      laterTime.setHours(laterTime.getHours() + 2);
+      alternatives.push(laterTime.toLocaleString('en-US', {
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      }));
+      
+      // Next day morning
+      const nextDayMorning = new Date(baseTime);
+      nextDayMorning.setDate(nextDayMorning.getDate() + 1);
+      nextDayMorning.setHours(10, 0, 0);
+      alternatives.push(nextDayMorning.toLocaleString('en-US', {
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      }));
+      
+      return alternatives;
+    }
+    
     let message = '';
     if (conflictingAppointment) {
-      message = `I'm sorry, but ${formattedDate} is not available. We already have an appointment at that time. Would you like to try another time? I can offer tomorrow at 10:00 AM, 2:00 PM, or 4:30 PM.`;
+      const alternatives = getAlternativeTimes(requestedTime);
+      message = `no - ${alternatives[0]}, ${alternatives[1]}, ${alternatives[2]}`;
     } else {
-      message = `Yes, ${formattedDate} is available! Would you like me to book this appointment for you?`;
+      message = 'yes';
     }
     
     // Format response according to Vapi docs
@@ -247,7 +272,7 @@ export async function POST(request: Request) {
     log('Error checking availability', error as Record<string, unknown>);
     
     const toolCallId = reqBody?.tool_call_id || '';
-    const errorMessage = 'Failed to check availability. Please try again.';
+    const errorMessage = 'error';
     
     return NextResponse.json(
       {
