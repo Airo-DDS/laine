@@ -72,6 +72,14 @@ interface VapiMessage {
   }>;
 }
 
+// Define type for Vapi voices
+type VapiVoiceId = "Elliot" | "Rohan" | "Lily" | "Savannah" | "Hana" | "Neha" | "Cole" | "Harry" | "Paige" | "Spencer";
+
+// List of available Vapi voices
+const vapiVoices: VapiVoiceId[] = [
+  "Elliot", "Rohan", "Lily", "Savannah", "Hana", "Neha", "Cole", "Harry", "Paige", "Spencer"
+];
+
 const DemoPage: FC = () => {
   // State variables
   const [vapiInstance, setVapiInstance] = useState<Vapi | null>(null);
@@ -83,6 +91,7 @@ const DemoPage: FC = () => {
   const [toolCalls, setToolCalls] = useState<ToolCallLog[]>([]);
   const [lastStatusUpdate, setLastStatusUpdate] = useState<string>('Idle');
   const [error, setError] = useState<string | null>(null);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<VapiVoiceId | ''>(''); // Empty string to enforce selection
 
   // Refs for auto-scrolling
   const transcriptEndRef = useRef<HTMLDivElement>(null);
@@ -312,11 +321,36 @@ const DemoPage: FC = () => {
       logEvent('Error', 'Attempted to start call before SDK initialization');
       return;
     }
+    
+    if (!selectedVoiceId) {
+      setError("Please select a voice before starting the call.");
+      logEvent('Error', 'Attempted to start call without selecting a voice');
+      return;
+    }
+    
     setError(null);
     setLastStatusUpdate('Starting Call...');
-    logEvent('Action', 'Start Call button clicked');
+    logEvent('Action', 'Start Call button clicked', { selectedVoiceId });
+    
     try {
-      await vapiInstance.start(assistantId);
+      // Create a properly typed object for the assistant overrides
+      // This defines the structure that the API expects
+      interface VapiAssistantOverrides {
+        voice: {
+          provider: 'vapi';
+          voiceId: VapiVoiceId;
+        };
+      }
+
+      const assistantOverrides: VapiAssistantOverrides = {
+        voice: {
+          provider: 'vapi',
+          voiceId: selectedVoiceId as VapiVoiceId, // Type assertion since we already validated above
+        },
+      };
+
+      // Start the call using the assistant ID and the overrides object
+      await vapiInstance.start(assistantId, assistantOverrides);
       // Status update will be handled by the 'call-start' event listener
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
@@ -363,13 +397,34 @@ const DemoPage: FC = () => {
       <h1 className="text-2xl font-bold text-center">Claire Core</h1>
 
       {/* Controls */}
-      <div className="flex justify-center items-center space-x-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
+      <div className="flex flex-col md:flex-row justify-center items-center space-y-3 md:space-y-0 md:space-x-4 p-4 bg-white dark:bg-gray-800 rounded-lg shadow">
+        {/* Voice Selection Dropdown */}
+        <div className="flex items-center space-x-2 w-full md:w-auto">
+          <label htmlFor="voice-select" className="text-sm font-medium flex items-center">
+            <Bot className="h-4 w-4 mr-1" /> Voice:
+          </label>
+          <select
+            id="voice-select"
+            value={selectedVoiceId}
+            onChange={(e) => setSelectedVoiceId(e.target.value as VapiVoiceId | '')}
+            className={`px-3 py-2 border ${selectedVoiceId ? 'border-gray-300 dark:border-gray-600' : 'border-red-300 dark:border-red-600'} bg-white dark:bg-gray-700 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 disabled:opacity-50 w-full md:w-auto`}
+            disabled={isSessionActive || !vapiInstance}
+          >
+            <option value="" disabled>Select a voice</option>
+            {vapiVoices.map(voice => (
+              <option key={voice} value={voice}>
+                {voice}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {!isSessionActive ? (
           <button
             type="button"
             onClick={handleStartCall}
-            className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition duration-150 disabled:opacity-50"
-            disabled={!vapiInstance}
+            className="flex items-center justify-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition duration-150 disabled:opacity-50 w-full md:w-auto"
+            disabled={!vapiInstance || !selectedVoiceId}
           >
             <Play className="mr-2 h-5 w-5" /> Start Call
           </button>
@@ -377,7 +432,7 @@ const DemoPage: FC = () => {
           <button
             type="button"
             onClick={handleStopCall}
-            className="flex items-center px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-150 disabled:opacity-50"
+            className="flex items-center justify-center px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition duration-150 disabled:opacity-50 w-full md:w-auto"
             disabled={!vapiInstance}
           >
             <Square className="mr-2 h-5 w-5" /> End Call
@@ -386,7 +441,7 @@ const DemoPage: FC = () => {
         <button
           type="button"
           onClick={toggleMute}
-          className={`flex items-center px-4 py-2 rounded-lg transition duration-150 ${isMuted ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-500 hover:bg-blue-600'} text-white disabled:opacity-50`}
+          className={`flex items-center justify-center px-4 py-2 rounded-lg transition duration-150 ${isMuted ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-blue-500 hover:bg-blue-600'} text-white disabled:opacity-50 w-full md:w-auto`}
           disabled={!isSessionActive}
         >
           {isMuted ? <MicOff className="mr-2 h-5 w-5" /> : <Mic className="mr-2 h-5 w-5" />}
