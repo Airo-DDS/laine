@@ -6,9 +6,9 @@ alwaysApply: false
 # .cursorrules
 
 project:
-  name: "Claire"
+  name: "Laine"
   description: >
-    Claire is an AI-Powered Dental Office Assistant designed to optimize dental practice workflows.
+    Laine is an AI-Powered Dental Office Assistant designed to optimize dental practice workflows.
     It is built to enhance patient interactions and streamline office operations, combining a
     real-time dashboard, a customizable AI virtual assistant, intelligent call handling, and smart task
     management into one unified experience.

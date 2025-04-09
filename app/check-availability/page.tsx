@@ -88,8 +88,8 @@ export default function CheckAvailability() {
 
       // Make API call to the local endpoint for faster development testing
       const apiUrl = window.location.hostname === 'localhost' 
-        ? 'http://localhost:3000/api/claire/check-availability'
-        : 'https://claire-core.vercel.app/api/claire/check-availability';
+        ? 'http://localhost:3000/api/laine/check-availability'
+        : 'https://laine-core.vercel.app/api/laine/check-availability';
         
       const response = await axios.post(
         apiUrl,

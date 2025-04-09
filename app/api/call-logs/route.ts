@@ -65,10 +65,8 @@ export async function GET(request: Request) {
     console.log('No calls found or unable to fetch details, returning mock data');
     
     // Sample transcript for the mock call
-    const sampleTranscript = `AI: Hello, this is Claire from Aero Dental. How can I assist you today?
-User: Hey, I'm John.
-AI: Thank you, John. How may I assist you today? Are you looking to schedule an appointment or inquire about our services?
-User: I'm looking to schedule an appointment.
+    const sampleTranscript = `AI: Hello, this is Laine from Aero Dental. How can I assist you with scheduling an appointment today?
+User: Hey, I'd like to book a cleaning.
 AI: Certainly. May I have your full name, please?
 User: John Daniel.
 AI: Thank you, John Daniel. What will be the purpose of your visit? For example, a cleaning, filling, consultation?
@@ -114,10 +112,8 @@ AI: You're welcome, John. Have a wonderful day.`;
     console.error('Error fetching calls:', error);
     
     // If there's an error with the API, return a sample call log
-    const sampleTranscript = `AI: Hello, this is Claire from Aero Dental. How can I assist you today?
-User: Hey, I'm John.
-AI: Thank you, John. How may I assist you today? Are you looking to schedule an appointment or inquire about our services?
-User: I'm looking to schedule an appointment.
+    const sampleTranscript = `AI: Hello, this is Laine from Aero Dental. How can I assist you with scheduling an appointment today?
+User: Hey, I'd like to book a cleaning.
 AI: Certainly. May I have your full name, please?
 User: John Daniel.
 AI: Thank you, John Daniel. What will be the purpose of your visit? For example, a cleaning, filling, consultation?

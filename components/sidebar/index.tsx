@@ -24,11 +24,11 @@ import {
   LayoutDashboard,
   MessageSquare,
   Users,
-  Brain,
   Settings,
   User,
   Menu,
   LogOut,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -49,9 +49,9 @@ const navigationItems = [
     icon: Users,
   },
   {
-    name: "AI Studio",
+    name: "AI Customiser",
     href: "/ai-customiser",
-    icon: Brain,
+    icon: Sparkles,
   },
   {
     name: "System",
