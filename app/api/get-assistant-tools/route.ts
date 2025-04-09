@@ -10,80 +10,125 @@ interface ToolInfo {
   type: string; // e.g., 'function', 'query', 'transferCall'
 }
 
-// Define interface for tool object returned by Vapi API
+// Simplified interface for Vapi Tool structure
 interface VapiTool {
   id?: string;
   type: string;
   function?: {
     name?: string;
     description?: string;
+    // Add other function properties if needed
   };
+  // Some tool types might have description at the root level
   description?: string;
+  // Add other potential root-level tool properties if needed
 }
 
 export async function GET(request: Request) {
+  // --- Basic Setup & Validation ---
   if (!VAPI_API_KEY) {
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    console.error("VAPI_API_KEY is not set in environment variables.");
+    return NextResponse.json({ error: 'Server configuration error: API key missing' }, { status: 500 });
   }
 
   const { searchParams } = new URL(request.url);
   const assistantId = searchParams.get('id');
 
   if (!assistantId) {
+    console.error("Request missing assistantId query parameter.");
     return NextResponse.json({ error: 'assistantId is required' }, { status: 400 });
   }
 
+  console.log(`[get-assistant-tools] Received request for assistantId: ${assistantId}`);
+
   try {
+    // Initialize Vapi Client
     const vapi = new VapiClient({ token: VAPI_API_KEY });
 
-    // 1. Fetch the assistant configuration
+    // --- Fetch Assistant Configuration ---
+    console.log(`[get-assistant-tools] Fetching assistant configuration for ID: ${assistantId}`);
     const assistant = await vapi.assistants.get(assistantId);
+
     if (!assistant || !assistant.model) {
-      return NextResponse.json({ tools: [] }); // No model or assistant found
+      console.log(`[get-assistant-tools] Assistant ${assistantId} not found or has no model configuration.`);
+      // Return empty list if assistant or model config is missing
+      return NextResponse.json({ tools: [] });
     }
+    console.log(`[get-assistant-tools] Successfully fetched assistant configuration for ${assistantId}.`);
 
     const toolList: ToolInfo[] = [];
 
-    // 2. Process transient tools defined directly in the assistant config
+    // --- Process Transient Tools (assistant.model.tools) ---
     if (Array.isArray(assistant.model.tools)) {
-      for (const tool of assistant.model.tools as VapiTool[]) {
-        // Extract common properties
+      console.log(`[get-assistant-tools] Processing ${assistant.model.tools.length} transient tools.`);
+      for (const tool of assistant.model.tools as VapiTool[]) { // Cast to your defined interface
         const name = tool.function?.name || tool.type; // Use function name or type as fallback
         const description = tool.function?.description || tool.description || `A ${tool.type} tool.`;
-        toolList.push({ name, description, type: tool.type });
+        toolList.push({
+          // Transient tools defined inline don't have an ID from Vapi's perspective *yet*
+          name,
+          description,
+          type: tool.type
+        });
       }
+    } else {
+      console.log('[get-assistant-tools] No transient tools found in assistant.model.tools.');
     }
 
-    // 3. Process toolIds (references to saved tools)
-    if (Array.isArray(assistant.model.toolIds)) {
+    // --- Process Tools by ID (assistant.model.toolIds) ---
+    if (Array.isArray(assistant.model.toolIds) && assistant.model.toolIds.length > 0) {
+      console.log(`[get-assistant-tools] Processing ${assistant.model.toolIds.length} tool IDs: ${assistant.model.toolIds.join(', ')}.`);
       const toolDetailPromises = assistant.model.toolIds.map(toolId =>
-        vapi.tools.get(toolId).catch(err => {
-          console.error(`Failed to fetch tool ${toolId}:`, err);
-          return null; // Return null if fetching a specific tool fails
-        })
+        vapi.tools.get(toolId)
+          .then(toolData => {
+            if (toolData) {
+              console.log(`[get-assistant-tools] Successfully fetched details for tool ID: ${toolId}`);
+              // Cast fetched data to VapiTool for consistent access
+              const tool = toolData as unknown as VapiTool;
+              const name = tool.function?.name || tool.type;
+              const description = tool.function?.description || tool.description || `A ${tool.type} tool.`;
+              return { id: tool.id, name, description, type: tool.type };
+            }
+            console.warn(`[get-assistant-tools] Tool data for ID ${toolId} was unexpectedly null or undefined.`);
+            return null; // Explicitly return null if data is missing
+          })
+          .catch(err => {
+            console.error(`[get-assistant-tools] Failed to fetch tool ${toolId}:`, err instanceof Error ? err.message : err);
+            return null; // Return null on fetch error to not break Promise.all
+          })
       );
+
       const toolDetails = await Promise.all(toolDetailPromises);
 
+      // Add successfully fetched tools to the list
       for (const tool of toolDetails) {
         if (tool) {
-          const name = tool.function?.name || tool.type;
-          // Use optional chaining for descriptions
-          const toolDescription = tool.function?.description || 
-            (tool as unknown as { description?: string })?.description || 
-            `A ${tool.type} tool.`;
-          toolList.push({ id: tool.id, name, description: toolDescription, type: tool.type });
+          toolList.push(tool);
         }
+      }
+      console.log('[get-assistant-tools] Finished processing tool IDs.');
+    } else {
+      console.log('[get-assistant-tools] No tool IDs found in assistant.model.toolIds.');
+    }
+
+    // --- Deduplicate and Return ---
+    // Use tool ID for uniqueness if available, otherwise use name + type as a composite key
+    const uniqueToolMap = new Map<string, ToolInfo>();
+    for (const tool of toolList) {
+      const key = tool.id || `${tool.name}-${tool.type}`; // Use ID if present, else composite key
+      if (!uniqueToolMap.has(key)) {
+        uniqueToolMap.set(key, tool);
       }
     }
 
-    // Remove duplicates if a tool is both transient and referenced by ID (unlikely but possible)
-    const uniqueToolList = Array.from(new Map(toolList.map(tool => [tool.name, tool])).values());
+    const uniqueToolList = Array.from(uniqueToolMap.values());
+    console.log(`[get-assistant-tools] Returning ${uniqueToolList.length} unique tools for assistant ${assistantId}.`);
 
     return NextResponse.json({ tools: uniqueToolList });
 
   } catch (error) {
-    console.error('Error fetching assistant tools:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[get-assistant-tools] Unexpected error fetching assistant tools:', error);
+    const message = error instanceof Error ? error.message : 'Unknown server error occurred';
     return NextResponse.json({ error: 'Internal Server Error', details: message }, { status: 500 });
   }
 } 
