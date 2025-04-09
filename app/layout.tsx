@@ -10,7 +10,7 @@ const geistSans = Geist({
 
 export const metadata: Metadata = {
   title: "Laine | AiroDental",
-  description: "Laine - AI Voice for Dental Practices",
+  description: "Laine - AI Voice Receptionist for Dental Practices",
 };
 
 export default function RootLayout({
