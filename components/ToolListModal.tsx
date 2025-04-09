@@ -10,14 +10,22 @@ import {
   SheetDescription,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { ListTree, Loader2, AlertCircle } from 'lucide-react';
+import { ListTree, Loader2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
-interface ToolInfo {
+// Use a more generic type for the full Vapi Tool structure
+interface VapiTool {
   id?: string;
-  name: string;
-  description?: string;
   type: string;
+  function?: {
+    name?: string;
+    description?: string;
+    parameters?: Record<string, unknown>;
+  };
+  description?: string;
+  destinations?: string[];
+  knowledgeBases?: string[];
+  [key: string]: unknown; // Allow for any other properties
 }
 
 interface ToolListModalProps {
@@ -26,9 +34,10 @@ interface ToolListModalProps {
 
 export function ToolListModal({ assistantId }: ToolListModalProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [tools, setTools] = useState<ToolInfo[]>([]);
+  const [tools, setTools] = useState<VapiTool[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedTool, setExpandedTool] = useState<string | null>(null); // Track which tool detail is open
 
   useEffect(() => {
     const fetchTools = async () => {
@@ -36,15 +45,21 @@ export function ToolListModal({ assistantId }: ToolListModalProps) {
 
       setIsLoading(true);
       setError(null);
+      setTools([]); // Clear previous tools
+      setExpandedTool(null); // Reset expanded state
+      
       try {
+        console.log(`[ToolListModal] Fetching tools for assistant: ${assistantId}`);
         const response = await fetch(`/api/get-assistant-tools?id=${assistantId}`);
         const data = await response.json();
         if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch tools');
+          throw new Error(data.error || `Failed to fetch tools (status: ${response.status})`);
         }
+        console.log(`[ToolListModal] Received ${data.tools?.length ?? 0} tools from API.`);
         setTools(data.tools || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Could not load tools');
+        console.error("[ToolListModal] Fetch Error:", err);
         setTools([]);
       } finally {
         setIsLoading(false);
@@ -54,23 +69,37 @@ export function ToolListModal({ assistantId }: ToolListModalProps) {
     fetchTools();
   }, [isOpen, assistantId]); // Refetch when modal opens or assistantId changes
 
+  const toggleExpand = (toolIdentifier: string) => {
+    setExpandedTool(prev => (prev === toolIdentifier ? null : toolIdentifier));
+  };
+
+  // Helper to get a display name (prioritize function name)
+  const getToolDisplayName = (tool: VapiTool): string => {
+     return tool.function?.name || tool.type || 'Unnamed Tool';
+  };
+
+  // Helper to get a description (prioritize function description)
+  const getToolDescription = (tool: VapiTool): string | undefined => {
+     return tool.function?.description || tool.description;
+  };
+
   return (
     <Sheet open={isOpen} onOpenChange={setIsOpen}>
       <SheetTrigger asChild>
         <Button
           variant="outline"
           size="icon"
-          className="fixed bottom-4 left-4 z-40 shadow-lg"
+          className="fixed bottom-4 left-4 z-40 shadow-lg rounded-full"
           aria-label="Show Assistant Tools"
         >
           <ListTree className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-[350px] sm:w-[540px] overflow-y-auto">
+      <SheetContent side="left" className="w-[90vw] max-w-[600px] sm:max-w-[700px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Configured Assistant Tools</SheetTitle>
           <SheetDescription>
-            List of tools available to assistant ID: {assistantId}
+            Tools available to assistant ID: <code className="text-xs bg-muted px-1 py-0.5 rounded">{assistantId}</code>
           </SheetDescription>
         </SheetHeader>
         <div className="py-4">
@@ -85,17 +114,52 @@ export function ToolListModal({ assistantId }: ToolListModalProps) {
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : tools.length === 0 ? (
-            <p className="text-center text-muted-foreground">No tools configured for this assistant.</p>
+            <p className="text-center text-muted-foreground py-8">No tools configured for this assistant.</p>
           ) : (
             <ul className="space-y-3">
-              {tools.map((tool, index) => (
-                <li key={tool.id || `${tool.name}-${index}`} className="border p-3 rounded-md bg-card">
-                  <p className="font-semibold text-card-foreground">{tool.name}</p>
-                  <p className="text-xs text-muted-foreground mt-1">Type: {tool.type}</p>
-                  {tool.id && <p className="text-xs text-muted-foreground">ID: {tool.id}</p>}
-                  {tool.description && <p className="text-sm mt-2">{tool.description}</p>}
-                </li>
-              ))}
+              {tools.map((tool) => {
+                const toolKey = tool.id || `${getToolDisplayName(tool)}-${tool.type}`; // Use ID or name as key
+                const isExpanded = expandedTool === toolKey;
+                return (
+                  <li key={toolKey} className="border dark:border-gray-700 rounded-md overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(toolKey)}
+                      className="w-full flex justify-between items-center p-3 text-left bg-card hover:bg-accent focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background"
+                      aria-expanded={isExpanded}
+                      aria-controls={`tool-details-${toolKey}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-card-foreground truncate">{getToolDisplayName(tool)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Type: {tool.type}</p>
+                        {getToolDescription(tool) && (
+                          <p className="text-sm text-muted-foreground mt-1 truncate">{getToolDescription(tool)}</p>
+                        )}
+                        {tool.id && <p className="text-xs text-muted-foreground mt-1">ID: {tool.id}</p>}
+                      </div>
+                      {isExpanded ? 
+                        <ChevronUp className="h-5 w-5 ml-2 flex-shrink-0" /> : 
+                        <ChevronDown className="h-5 w-5 ml-2 flex-shrink-0" />
+                      }
+                    </button>
+
+                    {/* Collapsible Content */}
+                    {isExpanded && (
+                      <div
+                        id={`tool-details-${toolKey}`}
+                        className="p-3 bg-muted/30 border-t"
+                      >
+                        <h4 className="text-sm font-medium mb-2 text-muted-foreground">Full Configuration:</h4>
+                        <pre className="bg-muted p-3 rounded text-xs overflow-x-auto">
+                          <code>
+                            {JSON.stringify(tool, null, 2)}
+                          </code>
+                        </pre>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

@@ -3,13 +3,6 @@ import { VapiClient } from '@vapi-ai/server-sdk';
 
 const VAPI_API_KEY = process.env.VAPI_API_KEY;
 
-interface ToolInfo {
-  id?: string; // ID might not exist for transient tools
-  name: string;
-  description?: string;
-  type: string; // e.g., 'function', 'query', 'transferCall'
-}
-
 // Simplified interface for Vapi Tool structure
 interface VapiTool {
   id?: string;
@@ -18,9 +11,12 @@ interface VapiTool {
     name?: string;
     description?: string;
     // Add other function properties if needed
+    parameters?: Record<string, unknown>;
   };
   // Some tool types might have description at the root level
   description?: string;
+  destinations?: string[];
+  knowledgeBases?: string[];
   // Add other potential root-level tool properties if needed
 }
 
@@ -56,19 +52,21 @@ export async function GET(request: Request) {
     }
     console.log(`[get-assistant-tools] Successfully fetched assistant configuration for ${assistantId}.`);
 
-    const toolList: ToolInfo[] = [];
+    const toolList: VapiTool[] = [];
 
     // --- Process Transient Tools (assistant.model.tools) ---
     if (Array.isArray(assistant.model.tools)) {
       console.log(`[get-assistant-tools] Processing ${assistant.model.tools.length} transient tools.`);
       for (const tool of assistant.model.tools as VapiTool[]) { // Cast to your defined interface
-        const name = tool.function?.name || tool.type; // Use function name or type as fallback
-        const description = tool.function?.description || tool.description || `A ${tool.type} tool.`;
+        // Add the full tool object
         toolList.push({
-          // Transient tools defined inline don't have an ID from Vapi's perspective *yet*
-          name,
-          description,
-          type: tool.type
+          ...tool,
+          // Add a generated name/description if not already present
+          function: {
+            ...tool.function,
+            name: tool.function?.name || tool.type,
+            description: tool.function?.description || tool.description || `A ${tool.type} tool.`
+          }
         });
       }
     } else {
@@ -83,11 +81,8 @@ export async function GET(request: Request) {
           .then(toolData => {
             if (toolData) {
               console.log(`[get-assistant-tools] Successfully fetched details for tool ID: ${toolId}`);
-              // Cast fetched data to VapiTool for consistent access
-              const tool = toolData as unknown as VapiTool;
-              const name = tool.function?.name || tool.type;
-              const description = tool.function?.description || tool.description || `A ${tool.type} tool.`;
-              return { id: tool.id, name, description, type: tool.type };
+              // Return the full tool data
+              return toolData as unknown as VapiTool;
             }
             console.warn(`[get-assistant-tools] Tool data for ID ${toolId} was unexpectedly null or undefined.`);
             return null; // Explicitly return null if data is missing
@@ -112,10 +107,10 @@ export async function GET(request: Request) {
     }
 
     // --- Deduplicate and Return ---
-    // Use tool ID for uniqueness if available, otherwise use name + type as a composite key
-    const uniqueToolMap = new Map<string, ToolInfo>();
+    // Use tool ID for uniqueness if available, otherwise use type + function name as a composite key
+    const uniqueToolMap = new Map<string, VapiTool>();
     for (const tool of toolList) {
-      const key = tool.id || `${tool.name}-${tool.type}`; // Use ID if present, else composite key
+      const key = tool.id || `${tool.function?.name || ''}-${tool.type}`; // Use ID if present, else composite key
       if (!uniqueToolMap.has(key)) {
         uniqueToolMap.set(key, tool);
       }
