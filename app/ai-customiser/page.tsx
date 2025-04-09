@@ -7,6 +7,7 @@ import { TrainTab } from './_components/TrainTab';
 import { TestTab } from './_components/TestTab';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ToolListModal } from '@/components/ToolListModal';
 
 // Define a simplified type for the config needed by ConfigureTab
 export interface AssistantConfig {
@@ -61,7 +62,7 @@ export default function AICustomiserPage() {
   }, [fetchAssistantConfig]);
 
   return (
-    <div className="flex flex-col p-6">
+    <div className="flex flex-col p-6 relative">
       <h1 className="text-2xl font-bold mb-6">AI Customiser</h1>
       {!assistantId && (
         <Alert variant="destructive" className="mb-4">
@@ -106,6 +107,8 @@ export default function AICustomiserPage() {
       ) : (
          <p>Could not load assistant configuration.</p> // Fallback if config is null but no error message
       )}
+      
+      {assistantId && <ToolListModal assistantId={assistantId} />}
     </div>
   );
 } 

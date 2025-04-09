@@ -10,13 +10,47 @@ interface TestTabProps {
   assistantId: string;
 }
 
+interface TranscriptEntry {
+  id: string; // Unique ID for React key
+  role: 'assistant' | 'user' | 'system' | 'tool_calls' | 'tool_call_result';
+  content: string;
+  name?: string; // For tool results
+  toolCallId?: string; // For tool results/calls
+  timestamp: number;
+}
+
+// Define a generic message type for Vapi messages
+interface VapiMessage {
+  type?: string;
+  role?: string;
+  transcriptType?: string;
+  transcript?: string;
+  toolCallList?: Array<{
+    id: string;
+    function?: {
+      name?: string;
+      arguments?: Record<string, unknown> | string;
+    };
+  }>;
+  toolCallResult?: {
+    name: string;
+    result?: unknown;
+    error?: unknown;
+    toolCallId: string;
+  };
+  content?: string;
+  message?: string;
+}
+
 export function TestTab({ assistantId }: TestTabProps) {
   const [assistant, setAssistant] = useState<Vapi | null>(null);
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
   const [isConnecting, setIsConnecting] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
-  const [lastTranscript, setLastTranscript] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [showToolCallNotification, setShowToolCallNotification] = useState<string | null>(null);
+  const [showToolResultNotification, setShowToolResultNotification] = useState<string | null>(null);
 
   const publicKey = process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY;
 
@@ -33,7 +67,7 @@ export function TestTab({ assistantId }: TestTabProps) {
       setIsSessionActive(true);
       setIsConnecting(false);
       setError(null);
-      setLastTranscript('');
+      setTranscript([]); // Clear transcript on new call
     });
     assistant.on('call-end', () => {
       console.log('Test Call Ended');
@@ -41,10 +75,62 @@ export function TestTab({ assistantId }: TestTabProps) {
       setIsConnecting(false);
       setIsMuted(false); // Reset mute state on call end
     });
-    assistant.on('message', (message) => {
-      if (message.type === 'transcript' && message.transcriptType === 'final') {
-        setLastTranscript(`${message.role}: ${message.transcript}`);
-      }
+    assistant.on('message', (message: VapiMessage) => {
+      console.log('Received message:', message); // Keep for debugging
+
+      const createEntry = (role: TranscriptEntry['role'], content: string, name?: string, toolCallId?: string): TranscriptEntry => ({
+        id: `${Date.now()}-${Math.random()}`, // Simple unique key
+        role,
+        content,
+        name,
+        toolCallId,
+        timestamp: Date.now()
+      });
+
+      setTranscript(prev => {
+        const newEntries: TranscriptEntry[] = [];
+
+        switch (message.type) {
+          case 'transcript':
+            // Only add final transcripts to the main log for clarity
+            if (message.transcriptType === 'final' && message.role && message.transcript) {
+              newEntries.push(createEntry(message.role as TranscriptEntry['role'], message.transcript));
+            }
+            break;
+          case 'tool-calls':
+            if (message.toolCallList && message.toolCallList.length > 0) {
+              for (const tc of message.toolCallList) {
+                const argsString = JSON.stringify(tc.function?.arguments || {});
+                const content = `Calling tool: ${tc.function?.name}(${argsString})`;
+                newEntries.push(createEntry('tool_calls', content, tc.function?.name, tc.id));
+                // Trigger toaster
+                setShowToolCallNotification(`Calling: ${tc.function?.name}`);
+                setTimeout(() => setShowToolCallNotification(null), 3000); // Hide after 3s
+              }
+            }
+            break;
+          case 'tool-calls-result':
+             if (message.toolCallResult) {
+                const resultString = JSON.stringify(message.toolCallResult.result || message.toolCallResult.error || 'No result/error provided');
+                const content = `Tool Result (${message.toolCallResult.name}): ${resultString}`;
+                newEntries.push(createEntry('tool_call_result', content, message.toolCallResult.name, message.toolCallResult.toolCallId));
+                // Trigger result toaster
+                setShowToolResultNotification(`Result for ${message.toolCallResult.name}: ${resultString.substring(0, 50)}...`);
+                 setTimeout(() => setShowToolResultNotification(null), 4000); // Hide after 4s
+             }
+            break;
+          default:
+             // If the message has a 'role' and 'content' or 'message', add it generically
+             if (message.role && (message.content || message.message)) {
+                 const content = message.content || message.message || '[No Content]';
+                 // Avoid adding duplicates if transcript event already handled it
+                 if (!prev.some(entry => entry.content === content && entry.role === message.role)) {
+                    newEntries.push(createEntry(message.role as TranscriptEntry['role'], content as string));
+                 }
+             }
+        }
+        return [...prev, ...newEntries];
+      });
     });
     assistant.on('error', (e) => {
       console.error('Assistant Error:', e);
@@ -63,7 +149,7 @@ export function TestTab({ assistantId }: TestTabProps) {
     if (!assistant || !assistantId) return;
     setIsConnecting(true);
     setError(null);
-    setLastTranscript('');
+    setTranscript([]); // Clear transcript
     try {
       await assistant.start(assistantId);
     } catch (e) {
@@ -150,10 +236,43 @@ export function TestTab({ assistantId }: TestTabProps) {
         </Alert>
       )}
 
-      <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded min-h-[50px]">
-        <p className="text-sm text-gray-600 dark:text-gray-300">Last Transcript:</p>
-        <p className="font-mono text-sm mt-1">{lastTranscript || (isSessionActive ? "Waiting for speech..." : "Call not active.")}</p>
+      {/* Transcript Display Area */}
+      <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded min-h-[200px] max-h-[400px] overflow-y-auto space-y-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-700 py-1">Conversation Transcript:</p>
+        {transcript.length === 0 && !isSessionActive && <p className="text-sm text-gray-500 dark:text-gray-400">Call not active.</p>}
+        {transcript.length === 0 && isSessionActive && <p className="text-sm text-gray-500 dark:text-gray-400">Waiting for speech...</p>}
+        {transcript.map((entry) => (
+          <div key={entry.id} className={`text-sm ${
+            entry.role === 'user' ? 'text-right' : 'text-left'
+          }`}>
+            <span className={`inline-block p-2 rounded-lg max-w-[80%] ${
+              entry.role === 'assistant' ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' :
+              entry.role === 'user' ? 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-100' :
+              entry.role === 'system' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-900 dark:text-yellow-100 italic' :
+              entry.role === 'tool_calls' ? 'bg-purple-100 dark:bg-purple-900 text-purple-900 dark:text-purple-100 font-mono text-xs' :
+              entry.role === 'tool_call_result' ? 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 font-mono text-xs' :
+              'bg-gray-100 dark:bg-gray-600' // Default/System
+            }`}>
+              <span className="font-bold capitalize">{entry.role.replace('_', ' ')}{entry.name ? ` (${entry.name})` : ''}: </span>
+              {entry.content}
+            </span>
+          </div>
+        ))}
       </div>
+
+      {/* Tool Call Toaster Notification */}
+      {showToolCallNotification && (
+        <div className="fixed bottom-4 right-4 bg-blue-500 text-white p-3 rounded-lg shadow-lg animate-pulse z-50 text-sm">
+          {showToolCallNotification}
+        </div>
+      )}
+
+      {/* Tool Result Toaster Notification */}
+       {showToolResultNotification && (
+         <div className="fixed bottom-16 right-4 bg-green-500 text-white p-3 rounded-lg shadow-lg z-50 text-sm max-w-xs break-words">
+           {showToolResultNotification}
+         </div>
+       )}
     </div>
   );
 } 

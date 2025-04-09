@@ -22,6 +22,7 @@ export function TrainTab({ assistantId }: TrainTabProps) {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [createdToolInfo, setCreatedToolInfo] = useState<{ id: string; name: string } | null>(null);
 
   const handleCreateKnowledgeBase = async () => {
     if (!kbContent.trim()) {
@@ -48,6 +49,7 @@ export function TrainTab({ assistantId }: TrainTabProps) {
     setIsLoading(true);
     setStatusMessage('');
     setErrorMessage('');
+    setCreatedToolInfo(null); // Reset previous info
 
     try {
       // --- 1. Upload File ---
@@ -62,10 +64,11 @@ export function TrainTab({ assistantId }: TrainTabProps) {
         throw new Error(`File upload failed: ${uploadData.error || uploadRes.statusText}`);
       }
       const fileId = uploadData.fileId;
-      setStatusMessage('File uploaded successfully.');
+      setStatusMessage(`File "${filename}" uploaded successfully (ID: ${fileId}).`);
+      console.log("Uploaded File ID:", fileId);
 
       // --- 2. Create Query Tool ---
-      setStatusMessage(`Creating knowledge tool for "${kbDescription}"...`);
+      setStatusMessage(`Creating knowledge tool "${toolName}" for "${kbDescription}"...`);
       const createToolRes = await fetch('/api/create-query-tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,10 +79,11 @@ export function TrainTab({ assistantId }: TrainTabProps) {
         throw new Error(`Knowledge tool creation failed: ${createToolData.error || createToolRes.statusText}`);
       }
       const toolId = createToolData.toolId;
-      setStatusMessage('Knowledge tool created successfully.');
+      setStatusMessage(`Knowledge tool "${toolName}" created successfully (ID: ${toolId}).`);
+      console.log("Created Tool ID:", toolId);
 
       // --- 3. Update Assistant ---
-      setStatusMessage('Attaching knowledge to assistant...');
+      setStatusMessage(`Attaching knowledge tool ${toolId} to assistant ${assistantId}...`);
       const updateAssistantRes = await fetch('/api/update-assistant-tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -89,7 +93,9 @@ export function TrainTab({ assistantId }: TrainTabProps) {
       if (!updateAssistantRes.ok || updateAssistantData.error) {
         throw new Error(`Assistant update failed: ${updateAssistantData.error || updateAssistantRes.statusText}`);
       }
-      setStatusMessage('Knowledge successfully added to your assistant!');
+      setStatusMessage(`Success! Knowledge tool "${toolName}" (ID: ${toolId}) attached to assistant.`);
+      setCreatedToolInfo({ id: toolId, name: toolName });
+      console.log("Assistant updated successfully:", updateAssistantData.assistant);
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'An unknown error occurred';
@@ -192,10 +198,19 @@ export function TrainTab({ assistantId }: TrainTabProps) {
         Upload Knowledge to Assistant
       </Button>
 
-      {statusMessage && !errorMessage && (
+      {statusMessage && !errorMessage && createdToolInfo && (
         <Alert>
           <CheckCircle className="h-4 w-4" />
           <AlertTitle>Success</AlertTitle>
+          <AlertDescription>
+            {statusMessage} You can now reference this knowledge in your assistant&apos;s prompt using the tool name: <strong>{createdToolInfo.name}</strong>.
+          </AlertDescription>
+        </Alert>
+      )}
+      {statusMessage && !errorMessage && !createdToolInfo && (
+        <Alert>
+          <CheckCircle className="h-4 w-4" />
+          <AlertTitle>Status</AlertTitle>
           <AlertDescription>{statusMessage}</AlertDescription>
         </Alert>
       )}
