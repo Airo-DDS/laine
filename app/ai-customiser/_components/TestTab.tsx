@@ -236,6 +236,19 @@ export function TestTab({ assistantId }: TestTabProps) {
         </Alert>
       )}
 
+      {/* Call-to-action Phone Number */}
+      <div className="my-8 p-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg text-center transform hover:scale-105 transition-transform duration-300 relative overflow-hidden">
+      <div className="absolute inset-0 bg-white opacity-10 animate-pulse" />
+        <h3 className="text-white text-2xl font-bold mb-2 relative z-10">Need assistance?</h3>
+        <a href="tel:+16035145807" className="group inline-block relative z-10">
+          <div className="text-white text-3xl font-extrabold mb-1 group-hover:text-blue-200 transition-colors duration-300 flex items-center justify-center">
+            <Mic className="mr-2 h-6 w-6 animate-pulse" />
+            Call +1 (603) 514 5807
+          </div>
+        </a>
+        <p className="text-blue-100 text-sm relative z-10">Our AI dental specialists are ready to help</p>
+      </div>
+
       {/* Transcript Display Area */}
       <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded min-h-[200px] max-h-[400px] overflow-y-auto space-y-2">
         <p className="text-xs text-gray-500 dark:text-gray-400 sticky top-0 bg-gray-50 dark:bg-gray-700 py-1">Conversation Transcript:</p>
