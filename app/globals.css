@@ -1,3 +1,7 @@
+/* Add react-big-calendar base styles FIRST */
+@import 'react-big-calendar/lib/css/react-big-calendar.css';
+
+/* Original imports */
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -119,4 +123,58 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Custom overrides for RBC to match Shadcn - separate from Tailwind layers */
+.rbc-event {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  border-radius: var(--radius);
+  padding: 2px 5px;
+  font-size: 0.8rem;
+}
+.rbc-event:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+.rbc-event.rbc-selected {
+  background-color: color-mix(in srgb, var(--primary) 80%, transparent);
+}
+.rbc-slot-selecting .rbc-event { 
+  background-color: color-mix(in srgb, var(--primary) 50%, transparent);
+}
+.rbc-toolbar button {
+  color: var(--foreground);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  transition-property: color, background-color, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+.rbc-toolbar button:hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+.rbc-toolbar button:active, .rbc-toolbar button.rbc-active {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+.rbc-off-range-bg {
+  background-color: color-mix(in srgb, var(--muted) 30%, transparent);
+}
+.rbc-today {
+  background-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.rbc-header {
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem 0.25rem;
+  text-align: center;
+}
+.rbc-time-header-gutter .rbc-header, .rbc-time-gutter .rbc-timeslot-group {
+  border-right: 1px solid var(--border);
+}
+.rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid var(--border);
 }
