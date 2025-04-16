@@ -111,7 +111,7 @@ export async function POST(request: Request) {
                 },
                 knowledgeBases: [{ // Define the KB source
                     provider: "google", // Ensure this matches Vapi's capability
-                    model: "gemini-2.0-flash", // Ensure this matches Vapi's capability
+                    model: "gemini-1.5-flash", // Ensure this matches Vapi's capability
                     name: vapiKbName,
                     description: vapiDescription,
                     fileIds: [vapiFileId],
@@ -322,7 +322,7 @@ export async function PUT(
                  knowledgeBases: [{
                      // Re-specify all required KB fields
                      provider: "google", // Assuming google provider
-                     model: "gemini-2.0-flash", // Assuming this model
+                     model: "gemini-1.5-flash", // Assuming this model
                      name: existingTopic.vapiKbName || names.vapiKbName, // Use existing or new KB name
                      description: names.vapiDescription, // Update description
                      fileIds: [newVapiFileId], // The crucial update
