@@ -264,7 +264,7 @@ export async function POST(request: Request) {
         // Example: if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2002') { ... }
 
         // Attempt rollback if a new patient was created
-        if (patientWasCreated && patient?.id) {
+      if (patientWasCreated && patient?.id) {
             log(`Attempting to rollback patient creation for ${patient.id}`);
             await prisma.patient.delete({ where: { id: patient.id } }).catch(rollbackError => {
                 log(`CRITICAL: Failed to rollback patient creation for ${patient.id}`, rollbackError);

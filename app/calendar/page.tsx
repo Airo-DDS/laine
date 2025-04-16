@@ -128,21 +128,21 @@ export default function CalendarPage() {
 
       // Important: Parse date strings into Date objects
       const parsedAppointments = appointmentsData.map((apt) => ({
-        ...apt,
-        date: new Date(apt.date)
-      }));
-
-      setAppointments(parsedAppointments);
-      setPatients(patientsData);
-    } catch (err) {
+          ...apt,
+          date: new Date(apt.date)
+        }));
+        
+        setAppointments(parsedAppointments);
+        setPatients(patientsData);
+      } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred fetching data';
       setError(message);
-      console.error('Error fetching data:', err);
-    } finally {
-      setLoading(false);
-    }
+        console.error('Error fetching data:', err);
+      } finally {
+        setLoading(false);
+      }
   }, []);
-
+    
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -165,7 +165,7 @@ export default function CalendarPage() {
     setIsDetailOpen(true);
     console.log("Selected Event:", event.resource); // For debugging
   }, []);
-
+  
   const handleSelectSlot = useCallback((slotInfo: { start: Date; end: Date }) => {
     setNewAppointmentSlot({ start: slotInfo.start, end: slotInfo.end });
     setSelectedAppointment(null); // Ensure no previous detail is shown
@@ -252,7 +252,7 @@ export default function CalendarPage() {
           </Link>
         </div>
       </div>
-
+      
       {error && (
         <Alert variant="destructive" className="mb-4">
           <AlertCircle className="h-4 w-4" />
@@ -284,9 +284,9 @@ export default function CalendarPage() {
           min={new Date(0, 0, 0, 8, 0, 0)}
           max={new Date(0, 0, 0, 18, 0, 0)}
           popup={true}
-        />
-      </div>
-
+                  />
+                </div>
+                
       <AppointmentFormModal
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}

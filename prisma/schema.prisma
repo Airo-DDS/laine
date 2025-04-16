@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
@@ -15,22 +9,56 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// Organization Model
+model Organization {
+  id        String   @id @default(cuid())
+  name      String   @default("Default Practice")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  users     User[]
+  patients  Patient[]
+  appointments Appointment[]
+  knowledgeTopics KnowledgeTopic[]
+  tasks Task[]
+  roleResponsibilities RoleResponsibility[]
+}
+
 // User model
 model User {
   id        String   @id @default(uuid())
   email     String   @unique
   name      String?
-  role      Role     @default(USER)
+  role      Role     @default(RECEPTIONIST)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
   patients  Patient[]
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  assignedTasks Task[] // Tasks assigned to this user
+  
+  @@index([organizationId])
 }
 
 enum Role {
-  USER
   ADMIN
-  RECEPTIONIST
   DENTIST
+  RECEPTIONIST
+  OFFICE_MANAGER
+  BILLING_SPECIALIST
+}
+
+// Role Responsibility Model
+model RoleResponsibility {
+  id String @id @default(cuid())
+  role Role
+  description String @db.Text
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([role, organizationId])
+  @@index([organizationId])
 }
 
 // Patient model
@@ -43,9 +71,16 @@ model Patient {
   dateOfBirth  DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  
   userId       String    
   user         User      @relation(fields: [userId], references: [id])
   appointments Appointment[]
+  
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  
+  @@index([organizationId])
+  @@index([userId])
 }
 
 enum PatientType {
@@ -63,8 +98,17 @@ model Appointment {
   notes       String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
   patientId   String
   patient     Patient  @relation(fields: [patientId], references: [id])
+  
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  
+  tasks       Task[] // Link appointments to tasks
+  
+  @@index([organizationId])
+  @@index([patientId])
 }
 
 enum AppointmentStatus {
@@ -72,6 +116,51 @@ enum AppointmentStatus {
   CONFIRMED
   CANCELLED
   COMPLETED
+  NO_SHOW
+}
+
+// Task Model
+model Task {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  description   String   @db.Text
+  status        TaskStatus @default(PENDING)
+  priority      TaskPriority @default(MEDIUM)
+  dueDate       DateTime?
+  
+  assignedToId  String?
+  assignedTo    User?    @relation(fields: [assignedToId], references: [id])
+  assignedRole  Role?
+  
+  callId        String?
+  
+  appointmentId String?
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  
+  organizationId String
+  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([assignedToId])
+  @@index([assignedRole])
+  @@index([status])
+  @@index([organizationId])
+  @@index([callId])
+  @@index([appointmentId])
+}
+
+enum TaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
 
 // KnowledgeTopic model
@@ -92,10 +181,9 @@ model KnowledgeTopic {
   vapiFileName  String?           // Generated internal file name
   vapiDescription String?       // Generated description used for tool/kb
 
-  // Optional: Link to the user who created/owns this topic
-  // userId        String
-  // user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
   @@index([assistantId])
-  // @@index([userId])
+  @@index([organizationId])
 }

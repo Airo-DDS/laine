@@ -25,9 +25,9 @@ function log(message: string, data?: unknown) {
 
 export async function GET(request: Request) {
     log("GET request received");
-    const { searchParams } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
     // Keep assistantId filtering optional for now, can fetch all org logs
-    const assistantId = searchParams.get('assistantId');
+  const assistantId = searchParams.get('assistantId');
     // Default to 10 most recent calls unless specified otherwise
     const limit = Number.parseInt(searchParams.get('limit') || '10', 10);
 
@@ -35,9 +35,9 @@ export async function GET(request: Request) {
     if (!VAPI_API_KEY) {
         log("VAPI_API_KEY is not set");
         return NextResponse.json({ error: 'Server configuration error: API key missing' }, { status: 500 });
-    }
+  }
 
-    try {
+  try {
         const client = new VapiClient({ token: VAPI_API_KEY });
 
         log(`Fetching calls ${assistantId ? `for assistant ${assistantId}` : 'for organization'} with limit ${limit}`);
@@ -54,8 +54,8 @@ export async function GET(request: Request) {
         // Fetch detailed information concurrently
         const detailPromises = callsList.map(async (basicCall) => {
             if (!basicCall.id) return null;
-            try {
-                const detailedCall = await client.calls.get(basicCall.id);
+      try {
+        const detailedCall = await client.calls.get(basicCall.id);
                 log(`Fetched details for call: ${detailedCall.id}`);
 
                 // Calculate duration
@@ -70,7 +70,7 @@ export async function GET(request: Request) {
                 const callLogInfo: CallLogInfo = {
                     id: detailedCall.id || '',  // Ensure id is always a string
                     createdAt: detailedCall.createdAt as string || new Date().toISOString(), // Fallback to current time
-                    endedAt: detailedCall.endedAt as string | null,
+          endedAt: detailedCall.endedAt as string | null,
                     durationSeconds: durationSeconds,
                     status: detailedCall.status || 'unknown',
                     endedReason: detailedCall.endedReason || null,
@@ -92,10 +92,10 @@ export async function GET(request: Request) {
         log(`Returning ${successfulDetailedCalls.length} detailed call logs.`);
         return NextResponse.json(successfulDetailedCalls);
 
-    } catch (error) {
+  } catch (error) {
         log('Error fetching call logs:', error);
         const message = error instanceof Error ? error.message : 'Failed to retrieve call logs.';
         // Don't return mock data in production, return the error
         return NextResponse.json({ error: message }, { status: 500 });
-    }
+  }
 } 

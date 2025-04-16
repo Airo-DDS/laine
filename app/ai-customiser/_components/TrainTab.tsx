@@ -47,7 +47,7 @@ interface KnowledgeTopic {
 }
 
 interface TrainTabProps {
-    assistantId: string;
+  assistantId: string;
 }
 
 export function TrainTab({ assistantId }: TrainTabProps) {
@@ -157,11 +157,11 @@ export function TrainTab({ assistantId }: TrainTabProps) {
         e.stopPropagation();
         if (!topic.vapiToolId) {
             setError("Cannot delete topic: Missing Vapi Tool ID.");
-            return;
-        }
+      return;
+    }
         if (!window.confirm(`Are you sure you want to delete the topic "${topic.topicName}"? This will remove the associated knowledge from Vapi.`)) {
-            return;
-        }
+      return;
+    }
 
         setDeletingTopicId(topic.vapiToolId);
         setError(null); // Clear main page error
@@ -170,7 +170,7 @@ export function TrainTab({ assistantId }: TrainTabProps) {
         try {
             const response = await fetch(`/api/knowledge-topics/${topic.vapiToolId}`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
                 // Send assistantId in body for potential verification on backend
                 body: JSON.stringify({ assistantId })
             });
@@ -186,25 +186,25 @@ export function TrainTab({ assistantId }: TrainTabProps) {
             const message = err instanceof Error ? err.message : 'Could not delete topic.';
             setError(message); // Show error on main page
             console.error("Delete Topic Error:", err);
-        } finally {
+    } finally {
             setDeletingTopicId(null);
-        }
-    };
+    }
+  };
 
-    return (
-        <div className="space-y-6 p-4 border rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+  return (
+    <div className="space-y-6 p-4 border rounded-lg bg-white dark:bg-gray-800 shadow-sm">
             <h2 className="text-xl font-semibold mb-2 flex items-center">
-                <FileText className="mr-2 h-5 w-5 text-gray-600 dark:text-gray-400" /> Train Your Assistant
-            </h2>
+        <FileText className="mr-2 h-5 w-5 text-gray-600 dark:text-gray-400" /> Train Your Assistant
+      </h2>
 
-            <Alert variant="default" className="bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700">
+      <Alert variant="default" className="bg-blue-50 dark:bg-blue-900 border-blue-200 dark:border-blue-700">
                 <Info className="h-4 w-4 text-blue-600 dark:text-blue-300 mt-1" />
                 <AlertTitle className="text-blue-800 dark:text-blue-200">Manage Knowledge Topics</AlertTitle>
-                <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
+        <AlertDescription className="text-blue-700 dark:text-blue-300 text-sm">
                     Add, edit, or delete specific knowledge topics for your assistant. Each topic is uploaded as a separate document.
                     Remember to update your assistant&apos;s system prompt in the &apos;Configure&apos; tab to guide it on *when* to use the knowledge from a specific topic (referencing it by the Topic Name you provide here).
-                </AlertDescription>
-            </Alert>
+        </AlertDescription>
+      </Alert>
 
             {error && (
                 <Alert variant="destructive">
@@ -219,7 +219,7 @@ export function TrainTab({ assistantId }: TrainTabProps) {
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
-                </div>
+          </div>
             ) : (
                 <>
                     <Accordion type="single" collapsible className="w-full space-y-2">
@@ -240,8 +240,8 @@ export function TrainTab({ assistantId }: TrainTabProps) {
                                                 {deletingTopicId === topic.vapiToolId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                                                 <span className="sr-only">Delete {topic.topicName}</span>
                                             </Button>
-                                        </div>
-                                    </div>
+          </div>
+      </div>
                                 </AccordionTrigger>
                                 <AccordionContent className="px-4 pb-4 pt-0">
                                     <Textarea
@@ -271,37 +271,37 @@ export function TrainTab({ assistantId }: TrainTabProps) {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-4">
-                        <div>
+       <div>
                             <Label htmlFor="modalTopicName">Topic Name</Label>
-                            <Input
+            <Input
                                 id="modalTopicName"
                                 value={modalTopicName}
                                 onChange={(e) => setModalTopicName(e.target.value)}
                                 placeholder="e.g., Office Hours, Insurance Policy"
-                                className="mt-1"
+              className="mt-1"
                                 disabled={isSaving}
-                            />
+            />
                              <p className="text-xs text-muted-foreground mt-1">A user-friendly name for this knowledge.</p>
-                        </div>
-                        <div>
+          </div>
+      <div>
                             <Label htmlFor="modalContent">Knowledge Content</Label>
-                            <Textarea
+        <Textarea
                                 id="modalContent"
                                 value={modalContent}
                                 onChange={(e) => setModalContent(e.target.value)}
                                 rows={12}
-                                className="mt-1 w-full font-mono text-sm"
+          className="mt-1 w-full font-mono text-sm"
                                 placeholder="Enter Q&A pairs, policy details, or other information..."
                                 disabled={isSaving}
-                            />
-                        </div>
+        />
+      </div>
                         {modalError && (
-                            <Alert variant="destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <AlertTitle>Error</AlertTitle>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
                                 <AlertDescription>{modalError}</AlertDescription>
-                            </Alert>
-                        )}
+        </Alert>
+      )}
                     </div>
                     <DialogFooter>
                         <DialogClose asChild>
@@ -316,6 +316,6 @@ export function TrainTab({ assistantId }: TrainTabProps) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
-    );
+    </div>
+  );
 } 

@@ -44,25 +44,25 @@ export default function CallLogsPage() {
     try {
       // Fetch all logs for the org by default, add assistantId filter later if needed
       const res = await fetch('/api/call-logs'); // Removed assistantId query param for now
-
-      if (!res.ok) {
+        
+        if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: 'Failed to parse error response' }));
         throw new Error(errorData.error || `Failed to fetch call logs (${res.status})`);
-      }
-
+        }
+        
       const data: CallLogInfo[] = await res.json();
       // Sort by creation date descending
       data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setCalls(data);
-
-    } catch (err) {
+        setCalls(data);
+        
+      } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
       console.error("Error fetching call logs:", err);
-    } finally {
-      setLoading(false);
-    }
+      } finally {
+        setLoading(false);
+      }
   }, []);
-
+    
   useEffect(() => {
     fetchCalls();
   }, [fetchCalls]);
@@ -100,7 +100,7 @@ export default function CallLogsPage() {
             Refresh
         </Button>
       </div>
-
+      
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -165,7 +165,7 @@ export default function CallLogsPage() {
             )}
           </TableBody>
         </Table>
-      </div>
+          </div>
 
       {/* Detail Modal */}
       <CallDetailModal
