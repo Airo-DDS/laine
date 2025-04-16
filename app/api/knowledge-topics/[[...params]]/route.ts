@@ -126,23 +126,52 @@ export async function POST(request: Request) {
             if (!vapiToolId) throw new Error('Vapi did not return a valid tool ID after creation.');
             log(`Tool created successfully: ${vapiToolId}`);
 
-            // 3. Update Assistant in Vapi
+            // 3. Update Assistant in Vapi (Send Full Model Object)
             log(`Attaching tool ${vapiToolId} to assistant ${_assistantId}...`);
             const assistantData = await vapiFetch(`/assistant/${_assistantId}`);
-            let existingToolIds: string[] = [];
-            if (assistantData && typeof assistantData === 'object' && 'model' in assistantData && assistantData.model && typeof assistantData.model === 'object' && 'toolIds' in assistantData.model && Array.isArray(assistantData.model.toolIds)) {
-                existingToolIds = assistantData.model.toolIds.filter((id): id is string => typeof id === 'string');
-            }
-            const newToolIds = [...new Set([...existingToolIds, vapiToolId])];
 
-            // --- Create the minimal PATCH payload ---
+            // --- Define types for the model object ---
+            interface VapiMessage {
+                role: string;
+                content: string;
+                // Add other potential message properties if known
+            }
+            type VapiModelPartial = {
+                provider?: string;
+                model?: string;
+                messages?: VapiMessage[]; // Use the specific message type
+                toolIds?: string[];
+                [key: string]: unknown; // Use unknown instead of any for index signature
+            };
+
+            // --- Extract the *entire* current model object ---
+            let currentModelObject: VapiModelPartial | null = null;
+            if (assistantData && typeof assistantData === 'object' && 'model' in assistantData && assistantData.model && typeof assistantData.model === 'object') {
+                currentModelObject = assistantData.model as VapiModelPartial;
+                log('Successfully retrieved current model object from assistant', currentModelObject);
+            } else {
+                // Fallback or throw error if model object is missing/invalid
+                log('Warning: Could not retrieve valid current model object from assistant. Check Vapi response. Throwing error.');
+                throw new Error(`Failed to retrieve a valid model object for assistant ${_assistantId}. Cannot proceed with PATCH.`);
+            }
+
+            // --- Get existing toolIds ---
+            const existingToolIds = Array.isArray(currentModelObject?.toolIds) // Optional chaining
+                ? currentModelObject.toolIds.filter((id: unknown): id is string => typeof id === 'string') // Type id as unknown
+                : [];
+            const newToolIds = [...new Set([...existingToolIds, vapiToolId])];
+            log(`Existing tool IDs: ${existingToolIds.join(', ')} | New tool IDs: ${newToolIds.join(', ')}`);
+
+
+            // --- Construct the PATCH payload with the FULL model object ---
             const assistantUpdatePayload = {
                 model: {
-                    toolIds: newToolIds // Send ONLY the updated toolIds array
+                    ...currentModelObject, // Spread the entire existing model object
+                    toolIds: newToolIds    // Override only the toolIds
                 }
             };
-            log('Sending minimal PATCH payload to update assistant', assistantUpdatePayload);
-            // -----------------------------------------
+            log('Sending FULL model object PATCH payload to update assistant', assistantUpdatePayload);
+            // -------------------------------------------------------------
 
             await vapiFetch(`/assistant/${_assistantId}`, {
                 method: 'PATCH',
