@@ -292,7 +292,7 @@ export async function PUT(
                  },
                  knowledgeBases: [{
                      // Re-specify all required KB fields
-                     provider: "openai", // Assuming google provider
+                     provider: "openai", // Assuming openai provider
                      model: "gpt-4o-mini", // Assuming this model
                      name: existingTopic.vapiKbName || names.vapiKbName, // Use existing or new KB name
                      description: names.vapiDescription, // Update description
@@ -468,4 +468,4 @@ export async function DELETE(
 // Handle CORS preflight OPTIONS request
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders });
-} 
+}
