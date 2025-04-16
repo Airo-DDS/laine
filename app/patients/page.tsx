@@ -2,6 +2,20 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type Patient = {
   id: string;
@@ -16,77 +30,116 @@ export default function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Load patients
   useEffect(() => {
     const fetchPatients = async () => {
       try {
+        setError(null); // Reset error on new fetch
         setLoading(true);
         const res = await fetch('/api/patients');
-        
+
         if (!res.ok) {
-          throw new Error('Failed to fetch patients');
+            const errorData = await res.text(); // Get more error details
+            throw new Error(`Failed to fetch patients: ${res.status} ${res.statusText} - ${errorData}`);
         }
-        
+
         const data = await res.json();
         setPatients(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        console.error("Error fetching patients:", err); // Log error
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchPatients();
   }, []);
 
   if (loading) {
-    return <div className="flex justify-center p-8">Loading patients...</div>;
+    return (
+      <div className="container mx-auto p-4 md:p-6 space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-8 w-32" />
+          <Skeleton className="h-10 w-40" />
+        </div>
+        <Card>
+            <CardHeader>
+                <Skeleton className="h-6 w-1/4" />
+            </CardHeader>
+            <CardContent>
+                <div className="space-y-3">
+                    <Skeleton className="h-10 w-full" /> {/* Header row skeleton */}
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                    <Skeleton className="h-12 w-full" />
+                </div>
+            </CardContent>
+        </Card>
+      </div>
+    );
   }
-  
+
   if (error) {
-    return <div className="p-8 text-red-600">Error: {error}</div>;
+     return (
+        <div className="container mx-auto p-4 md:p-6">
+            <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Error Loading Patients</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+            </Alert>
+            <div className="mt-4">
+               <Link href="/calendar">
+                   <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4"/> Back to Calendar</Button>
+               </Link>
+            </div>
+        </div>
+     );
   }
 
   return (
-    <div className="container mx-auto p-4">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Patients</h1>
-        <Link 
-          href="/calendar" 
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-        >
-          Back to Calendar
+    <div className="container mx-auto p-4 md:p-6 space-y-6">
+      <div className="flex justify-between items-center flex-wrap gap-2">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Patients</h1>
+        <Link href="/calendar">
+            <Button variant="outline"><ArrowLeft className="mr-2 h-4 w-4"/> Back to Calendar</Button>
         </Link>
       </div>
-      
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white border border-gray-200">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="py-2 px-4 border-b text-left">Name</th>
-              <th className="py-2 px-4 border-b text-left">Email</th>
-              <th className="py-2 px-4 border-b text-left">Phone</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {patients.length > 0 ? (
-              patients.map(patient => (
-                <tr key={patient.id} className="hover:bg-gray-50">
-                  <td className="py-2 px-4">{patient.firstName} {patient.lastName}</td>
-                  <td className="py-2 px-4">{patient.email || 'N/A'}</td>
-                  <td className="py-2 px-4">{patient.phoneNumber || 'N/A'}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={3} className="py-4 text-center text-gray-500">
-                  No patients found
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+
+       <Card>
+         <CardHeader>
+            <CardTitle>Patient List</CardTitle>
+         </CardHeader>
+         <CardContent>
+            <Table>
+              {/* Optional: Add TableCaption if needed */}
+              {/* <TableCaption>A list of registered patients.</TableCaption> */}
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[250px]">Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="text-right">Phone Number</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {patients.length > 0 ? (
+                  patients.map((patient) => (
+                    <TableRow key={patient.id}>
+                      <TableCell className="font-medium">{patient.firstName} {patient.lastName}</TableCell>
+                      <TableCell>{patient.email || <span className='text-muted-foreground'>N/A</span>}</TableCell>
+                      <TableCell className="text-right">{patient.phoneNumber || <span className='text-muted-foreground'>N/A</span>}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                      No patients found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+         </CardContent>
+       </Card>
     </div>
   );
 } 
