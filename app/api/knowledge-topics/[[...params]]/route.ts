@@ -66,7 +66,6 @@ export async function GET(request: Request) {
 // POST /api/knowledge-topics
 export async function POST(request: Request) {
     log("POST request received");
-    let assistantId: string | undefined; // Define here for use in catch/finally
     try {
         const body = await request.json();
         const validation = PostTopicSchema.safeParse(body);
@@ -77,9 +76,9 @@ export async function POST(request: Request) {
         }
 
         // Assign assistantId after validation
-        assistantId = validation.data.assistantId;
+        const _assistantId = validation.data.assistantId;
         const { topicName, content } = validation.data;
-        log(`Processing POST for topic "${topicName}" for assistant ${assistantId}`);
+        log(`Processing POST for topic "${topicName}" for assistant ${_assistantId}`);
 
         const { vapiFileName, vapiToolName, vapiKbName, vapiDescription } = generateVapiNamesUtil(topicName);
 
@@ -128,20 +127,29 @@ export async function POST(request: Request) {
             log(`Tool created successfully: ${vapiToolId}`);
 
             // 3. Update Assistant in Vapi
-            log(`Attaching tool ${vapiToolId} to assistant ${assistantId}...`);
-            const assistantData = await vapiFetch(`/assistant/${assistantId}`);
+            log(`Attaching tool ${vapiToolId} to assistant ${_assistantId}...`);
+            const assistantData = await vapiFetch(`/assistant/${_assistantId}`);
             let existingToolIds: string[] = [];
             if (assistantData && typeof assistantData === 'object' && 'model' in assistantData && assistantData.model && typeof assistantData.model === 'object' && 'toolIds' in assistantData.model && Array.isArray(assistantData.model.toolIds)) {
                 existingToolIds = assistantData.model.toolIds.filter((id): id is string => typeof id === 'string');
             }
             const newToolIds = [...new Set([...existingToolIds, vapiToolId])];
 
-            await vapiFetch(`/assistant/${assistantId}`, {
+            // --- Create the minimal PATCH payload ---
+            const assistantUpdatePayload = {
+                model: {
+                    toolIds: newToolIds // Send ONLY the updated toolIds array
+                }
+            };
+            log('Sending minimal PATCH payload to update assistant', assistantUpdatePayload);
+            // -----------------------------------------
+
+            await vapiFetch(`/assistant/${_assistantId}`, {
                 method: 'PATCH',
-                body: JSON.stringify({ model: { toolIds: newToolIds } }),
+                body: JSON.stringify(assistantUpdatePayload),
             });
             assistantUpdated = true;
-            log(`Assistant ${assistantId} updated successfully with tool ${vapiToolId}`);
+            log(`Assistant ${_assistantId} updated successfully with tool ${vapiToolId}`);
 
             // 4. Create KnowledgeTopic in Local DB
             log(`Saving KnowledgeTopic "${topicName}" to local DB...`);
@@ -149,7 +157,7 @@ export async function POST(request: Request) {
                 data: {
                     topicName: topicName.trim(),
                     content: content,
-                    assistantId: assistantId,
+                    assistantId: _assistantId,
                     vapiToolId: vapiToolId,
                     vapiFileId: vapiFileId,
                     vapiKbName: vapiKbName,
@@ -166,19 +174,19 @@ export async function POST(request: Request) {
             log('Error during Vapi operations or DB save', vapiError);
             // --- Rollback Vapi Resources ---
              if (vapiToolId && assistantUpdated) {
-                 log(`Attempting rollback: Detach tool ${vapiToolId} from assistant ${assistantId}`);
+                 log(`Attempting rollback: Detach tool ${vapiToolId} from assistant ${_assistantId}`);
                  try {
-                     const currentAssistantData = await vapiFetch(`/assistant/${assistantId}`);
+                     const currentAssistantData = await vapiFetch(`/assistant/${_assistantId}`);
                      let currentToolIds: string[] = [];
                       if (currentAssistantData && typeof currentAssistantData === 'object' && 'model' in currentAssistantData && currentAssistantData.model && typeof currentAssistantData.model === 'object' && 'toolIds' in currentAssistantData.model && Array.isArray(currentAssistantData.model.toolIds)) {
                          currentToolIds = currentAssistantData.model.toolIds.filter((id): id is string => typeof id === 'string');
                      }
                      const filteredToolIds = currentToolIds.filter((id: string) => id !== vapiToolId);
-                     await vapiFetch(`/assistant/${assistantId}`, {
+                     await vapiFetch(`/assistant/${_assistantId}`, {
                          method: 'PATCH',
                          body: JSON.stringify({ model: { toolIds: filteredToolIds } }),
                      });
-                     log(`Rollback: Tool ${vapiToolId} detached from assistant ${assistantId}`);
+                     log(`Rollback: Tool ${vapiToolId} detached from assistant ${_assistantId}`);
                  } catch (rollbackError) {
                      log(`CRITICAL: Failed to detach tool ${vapiToolId} during rollback`, rollbackError);
                  }
@@ -389,16 +397,20 @@ export async function DELETE(
              if (assistantData && typeof assistantData === 'object' && 'model' in assistantData && assistantData.model && typeof assistantData.model === 'object' && 'toolIds' in assistantData.model && Array.isArray(assistantData.model.toolIds)) {
                  currentToolIds = assistantData.model.toolIds.filter((id): id is string => typeof id === 'string');
             }
-            if (currentToolIds.includes(vapiToolId)) {
-                const filteredToolIds = currentToolIds.filter((id: string) => id !== vapiToolId);
-                 await vapiFetch(`/assistant/${assistantId}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ model: { toolIds: filteredToolIds } }),
-                });
-                log(`Tool ${vapiToolId} detached successfully.`);
-            } else {
-                 log(`Tool ${vapiToolId} was already detached or not found on assistant ${assistantId}.`);
-            }
+            const filteredToolIds = currentToolIds.filter((id: string) => id !== vapiToolId);
+            
+            const assistantUpdatePayload = {
+                model: {
+                    toolIds: filteredToolIds // Send ONLY the updated toolIds array
+                }
+            };
+            log('Sending minimal PATCH payload to update assistant', assistantUpdatePayload);
+            
+            await vapiFetch(`/assistant/${assistantId}`, {
+                method: 'PATCH',
+                body: JSON.stringify(assistantUpdatePayload),
+            });
+            log(`Tool ${vapiToolId} detached successfully.`);
         } catch (error) {
              const msg = `Failed to detach tool ${vapiToolId} from assistant ${assistantId}: ${error instanceof Error ? error.message : error}`;
              log(msg);
