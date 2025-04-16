@@ -73,3 +73,29 @@ enum AppointmentStatus {
   CANCELLED
   COMPLETED
 }
+
+// KnowledgeTopic model
+model KnowledgeTopic {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  topicName     String   // User-facing name (e.g., "Office Hours")
+  content       String   @db.Text // The actual knowledge content provided by the user
+  assistantId   String   // ID of the Vapi Assistant this topic belongs to
+
+  // Vapi resource IDs - store them once created
+  vapiToolId    String?  @unique // The ID of the Vapi 'query' tool
+  vapiFileId    String?           // The ID of the Vapi file containing the content
+  vapiKbName    String?           // Generated internal KB name
+  vapiToolName  String?           // Generated internal tool name
+  vapiFileName  String?           // Generated internal file name
+  vapiDescription String?       // Generated description used for tool/kb
+
+  // Optional: Link to the user who created/owns this topic
+  // userId        String
+  // user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([assistantId])
+  // @@index([userId])
+}
