@@ -76,9 +76,9 @@ export async function POST(request: Request) {
         }
 
         // Assign assistantId after validation
-        const _assistantId = validation.data.assistantId;
+        const assistantId = validation.data.assistantId;
         const { topicName, content } = validation.data;
-        log(`Processing POST for topic "${topicName}" for assistant ${_assistantId}`);
+        log(`Processing POST for topic "${topicName}" for assistant ${assistantId}`);
 
         const { vapiFileName, vapiToolName, vapiKbName, vapiDescription } = generateVapiNamesUtil(topicName);
 
@@ -127,8 +127,8 @@ export async function POST(request: Request) {
             log(`Tool created successfully: ${vapiToolId}`);
 
             // 3. Update Assistant in Vapi (Send Full Model Object)
-            log(`Attaching tool ${vapiToolId} to assistant ${_assistantId}...`);
-            const assistantData = await vapiFetch(`/assistant/${_assistantId}`);
+            log(`Attaching tool ${vapiToolId} to assistant ${assistantId}...`);
+            const assistantData = await vapiFetch(`/assistant/${assistantId}`);
 
             // --- Define types for the model object ---
             interface VapiMessage {
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
             } else {
                 // Fallback or throw error if model object is missing/invalid
                 log('Warning: Could not retrieve valid current model object from assistant. Check Vapi response. Throwing error.');
-                throw new Error(`Failed to retrieve a valid model object for assistant ${_assistantId}. Cannot proceed with PATCH.`);
+                throw new Error(`Failed to retrieve a valid model object for assistant ${assistantId}. Cannot proceed with PATCH.`);
             }
 
             // --- Get existing toolIds ---
@@ -173,12 +173,12 @@ export async function POST(request: Request) {
             log('Sending FULL model object PATCH payload to update assistant', assistantUpdatePayload);
             // -------------------------------------------------------------
 
-            await vapiFetch(`/assistant/${_assistantId}`, {
+            await vapiFetch(`/assistant/${assistantId}`, {
                 method: 'PATCH',
                 body: JSON.stringify(assistantUpdatePayload),
             });
             assistantUpdated = true;
-            log(`Assistant ${_assistantId} updated successfully with tool ${vapiToolId}`);
+            log(`Assistant ${assistantId} updated successfully with tool ${vapiToolId}`);
 
             // 4. Create KnowledgeTopic in Local DB
             log(`Saving KnowledgeTopic "${topicName}" to local DB...`);
@@ -186,7 +186,7 @@ export async function POST(request: Request) {
                 data: {
                     topicName: topicName.trim(),
                     content: content,
-                    assistantId: _assistantId,
+                    assistantId: assistantId,
                     vapiToolId: vapiToolId,
                     vapiFileId: vapiFileId,
                     vapiKbName: vapiKbName,
@@ -203,19 +203,19 @@ export async function POST(request: Request) {
             log('Error during Vapi operations or DB save', vapiError);
             // --- Rollback Vapi Resources ---
              if (vapiToolId && assistantUpdated) {
-                 log(`Attempting rollback: Detach tool ${vapiToolId} from assistant ${_assistantId}`);
+                 log(`Attempting rollback: Detach tool ${vapiToolId} from assistant ${assistantId}`);
                  try {
-                     const currentAssistantData = await vapiFetch(`/assistant/${_assistantId}`);
+                     const currentAssistantData = await vapiFetch(`/assistant/${assistantId}`);
                      let currentToolIds: string[] = [];
                       if (currentAssistantData && typeof currentAssistantData === 'object' && 'model' in currentAssistantData && currentAssistantData.model && typeof currentAssistantData.model === 'object' && 'toolIds' in currentAssistantData.model && Array.isArray(currentAssistantData.model.toolIds)) {
                          currentToolIds = currentAssistantData.model.toolIds.filter((id): id is string => typeof id === 'string');
                      }
                      const filteredToolIds = currentToolIds.filter((id: string) => id !== vapiToolId);
-                     await vapiFetch(`/assistant/${_assistantId}`, {
+                     await vapiFetch(`/assistant/${assistantId}`, {
                          method: 'PATCH',
                          body: JSON.stringify({ model: { toolIds: filteredToolIds } }),
                      });
-                     log(`Rollback: Tool ${vapiToolId} detached from assistant ${_assistantId}`);
+                     log(`Rollback: Tool ${vapiToolId} detached from assistant ${assistantId}`);
                  } catch (rollbackError) {
                      log(`CRITICAL: Failed to detach tool ${vapiToolId} during rollback`, rollbackError);
                  }

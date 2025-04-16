@@ -17,10 +17,12 @@ import { Role, TaskPriority, TaskStatus } from '@prisma/client';
 // Type definitions for our data
 interface CallLog {
   id: string;
-  date: string;
-  summary: string;
-  transcript: string;
-  structuredData?: Record<string, unknown>;
+  createdAt: string;
+  endedAt: string | null;
+  summary: string | null;
+  transcript: string | null;
+  structuredData?: Record<string, unknown> | null;
+  recordingUrl?: string | null;
 }
 
 interface Task {
@@ -202,10 +204,10 @@ export default function TasksPage() {
                     >
                       <CardContent className="p-4">
                         <p className="text-sm font-medium mb-1">
-                          {new Date(call.date).toLocaleString()}
+                          {new Date(call.createdAt).toLocaleString()}
                         </p>
                         <p className="text-sm text-gray-700 line-clamp-2">
-                          {call.summary}
+                          {call.summary || 'No summary available'}
                         </p>
                       </CardContent>
                     </Card>
@@ -226,15 +228,15 @@ export default function TasksPage() {
                 <CardTitle>Call Details</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="font-medium mb-2">Date: {new Date(selectedCall.date).toLocaleString()}</p>
+                <p className="font-medium mb-2">Date: {new Date(selectedCall.createdAt).toLocaleString()}</p>
                 <div className="mb-4">
                   <p className="font-medium mb-1">Summary:</p>
-                  <p className="text-gray-700">{selectedCall.summary}</p>
+                  <p className="text-gray-700">{selectedCall.summary || 'No summary available'}</p>
                 </div>
                 <div>
                   <p className="font-medium mb-1">Transcript Preview:</p>
                   <div className="bg-gray-50 p-3 rounded-md max-h-[150px] overflow-y-auto text-sm">
-                    {selectedCall.transcript}
+                    {selectedCall.transcript || 'No transcript available'}
                   </div>
                 </div>
                 <Button
