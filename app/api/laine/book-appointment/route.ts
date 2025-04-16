@@ -1,268 +1,297 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, PatientType, Role } from '@prisma/client'; // Keep value imports
+import type { Patient, Appointment } from '@prisma/client'; // Use type imports for types
 
 const prisma = new PrismaClient();
 
-// Simple logging function
+// --- Configuration & Constants ---
+const DEFAULT_APPOINTMENT_REASON = "Appointment via voice assistant";
+const DEFAULT_TIMEZONE = 'America/Chicago'; // Or pull from env var if needed
+
+// --- Logging Utility ---
 function log(message: string, data?: unknown) {
-  console.log(`[${new Date().toISOString()}] ${message}`);
-  if (data) console.log(JSON.stringify(data, null, 2));
+  console.log(`[${new Date().toISOString()}] [book-appointment] ${message}`);
+  if (data) {
+    // Avoid logging potentially sensitive full request bodies in production if necessary
+    // Consider redacting sensitive fields if logging the full body
+    console.log(JSON.stringify(data, null, 2));
+  }
 }
 
-// Define CORS headers
+// --- CORS Headers ---
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': '*', // Adjust in production
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// Simple interface for appointment parameters
+// --- Interfaces ---
 interface AppointmentParams {
-  start: string; // ISO Date string
+  start: string; // Expect ISO 8601 string
   name: string;
   email: string;
-  smsReminderNumber?: string; // Optional
+  smsReminderNumber?: string;
 }
 
-export async function POST(request: Request) {
-  let toolCallId = 'unknown';
-  
-  log('Received book appointment request', {
-    url: request.url,
-    method: request.method
-  });
-  
-  try {
-    // Handle preflight request
-    if (request.method === 'OPTIONS') {
-      return new NextResponse(null, {
-        status: 204,
-        headers: corsHeaders,
-      });
-    }
+interface VapiToolCall {
+    id: string;
+    function?: {
+        name?: string;
+        arguments?: string | Record<string, unknown>;
+    };
+}
 
-    // Parse the request body
-    const reqBody = await request.json();
-    log('Request body', reqBody);
+interface RequestBody {
+    message?: { toolCalls?: VapiToolCall[]; toolCallList?: VapiToolCall[] };
+    tool_call_id?: string;
+    parameters?: Record<string, unknown>; // Direct Vapi format
+    toolCallId?: string; // OpenAI format
+    arguments?: string | Record<string, unknown>; // OpenAI format
+    toolCalls?: VapiToolCall[]; // Vapi array format
+}
 
-    // Extract toolCallId and parameters from different possible structures
-    let functionParams: AppointmentParams | undefined;
-    
-    // Handle direct VAPI format
-    if (reqBody.tool_call_id) {
-      toolCallId = reqBody.tool_call_id;
-      
-      // Check if function arguments are provided
-      if (reqBody.function?.arguments) {
-        const args = typeof reqBody.function.arguments === 'string' 
-          ? JSON.parse(reqBody.function.arguments)
-          : reqBody.function.arguments;
-        
-        functionParams = args;
-      } else if (reqBody.parameters) {
-        // Fallback to parameters object
-        functionParams = reqBody.parameters;
-      }
-    } 
-    // Handle OpenAI format 
-    else if (reqBody.toolCallId) {
-      toolCallId = reqBody.toolCallId;
-      
-      if (reqBody.arguments) {
-        functionParams = typeof reqBody.arguments === 'string'
-          ? JSON.parse(reqBody.arguments)
-          : reqBody.arguments;
-      }
-    }
-    // Handle array format from VAPI
-    else if (Array.isArray(reqBody.toolCalls) && reqBody.toolCalls.length > 0) {
-      const toolCall = reqBody.toolCalls[0];
-      toolCallId = toolCall.id;
-      
-      if (toolCall.function?.arguments) {
-        functionParams = typeof toolCall.function.arguments === 'string'
-          ? JSON.parse(toolCall.function.arguments)
-          : toolCall.function.arguments;
-      }
-    }
-    
-    if (!functionParams) {
-      return NextResponse.json({
-        results: [{
-          toolCallId,
-          error: 'Missing required parameters'
-        }]
-      }, { status: 400, headers: corsHeaders });
-    }
-    
-    const { start, name, email, smsReminderNumber } = functionParams;
-    
-    // Check for required parameters
-    if (!start) {
-      log('Missing start parameter');
-      return NextResponse.json(
-        { 
-          tool_call_id: toolCallId,
-          status: 'error',
-          message: 'Start date is required'
-        }, 
-        { 
-          status: 400,
-          headers: corsHeaders 
-        }
-      );
-    }
+// --- Helper Functions ---
 
-    if (!name || !email) {
-      log('Missing name or email parameters');
-      return NextResponse.json(
-        { 
-          tool_call_id: toolCallId,
-          status: 'error',
-          message: 'Name and email are required'
-        }, 
-        { 
-          status: 400,
-          headers: corsHeaders 
-        }
-      );
-    }
-    
-    // Basic validation on date format
-    const appointmentDate = new Date(start);
-    if (appointmentDate.toString() === 'Invalid Date' || Number.isNaN(appointmentDate.getTime())) {
-      log('Invalid date format', { start });
-      return NextResponse.json(
-        { 
-          tool_call_id: toolCallId,
-          status: 'error',
-          message: 'Invalid date format'
-        }, 
-        { 
-          status: 400,
-          headers: corsHeaders 
-        }
-      );
-    }
-    
-    log(`Booking appointment for ${name} (${email}) at ${start}`);
-    
-    // Find or create patient record (simplified)
-    let patient = null;
-    try {
-      // Parse name into first and last
-      const nameParts = name.trim().split(' ');
-      const firstName = nameParts[0];
-      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
-      
-      // First try to find the patient
-      patient = await prisma.patient.findFirst({
-        where: { email }
-      });
-      
-      // If not found, create a new patient
-      if (!patient) {
-        // Find a dentist (we need a user ID for the patient)
-        const users = await prisma.user.findMany({
-          where: { role: 'DENTIST' },
-          take: 1
-        });
-        
-        const dentistId = users.length > 0 ? users[0].id : null;
-        if (!dentistId) {
-          throw new Error('No dentist found in the system');
-        }
-        
-        // Create the patient
-        patient = await prisma.patient.create({
-          data: {
-            firstName,
-            lastName,
-            email,
-            phoneNumber: smsReminderNumber || null,
-            userId: dentistId
-          }
-        });
-        
-        log('Created new patient:', patient);
-      }
-    } catch (e) {
-      log('Error with patient', e);
-      // We'll still try to create an appointment with a mock patient ID
-      if (!patient) {
-        patient = { id: 'mock-patient-id' };
-      }
-    }
-    
-    // Create the appointment with simplified error handling
-    let appointment = null;
-    try {
-      appointment = await prisma.appointment.create({
-        data: {
-          date: appointmentDate,
-          reason: 'Appointment via voice assistant',
-          patientType: 'NEW',
-          status: 'SCHEDULED',
-          notes: `Booked via VAPI. ${smsReminderNumber ? `SMS: ${smsReminderNumber}` : ''}`,
-          patientId: patient.id
-        }
-      });
-      
-      log('Created appointment:', appointment);
-    } catch (e) {
-      log('Error creating appointment', e);
-      // Continue - we'll still return a success message
-    }
-    
-    // Format the date for the response
-    const formattedDate = appointmentDate.toLocaleString('en-US', {
+// Standardized Vapi Response
+function createVapiResponse(toolCallId: string, result?: string, error?: string, status = 200) {
+  const payload = {
+    results: [{
+      toolCallId,
+      ...(result && { result }), // Conditionally add result
+      ...(error && { error }),   // Conditionally add error
+    }]
+  };
+  return NextResponse.json(payload, { status, headers: corsHeaders });
+}
+
+// Parse Name
+function parseFullName(fullName: string): { firstName: string; lastName: string } {
+  const nameParts = fullName.trim().split(' ');
+  const firstName = nameParts[0] || 'Unknown'; // Default if empty
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'Patient'; // Default if only one name part
+  return { firstName, lastName };
+}
+
+// Format Date for Confirmation Message
+function formatConfirmationDate(date: Date): string {
+   return date.toLocaleString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
-      timeZone: 'America/Chicago',
+      hour12: true,
+      timeZone: DEFAULT_TIMEZONE, // Use configured timezone
     });
-    
-    // Success response
-    log('Appointment created successfully', { appointmentId: appointment?.id || 'unknown' });
-    return NextResponse.json(
-      {
-        tool_call_id: toolCallId,
-        status: 'success',
-        message: `Your appointment has been scheduled for ${formattedDate}`
-      },
-      { headers: corsHeaders }
-    );
+}
 
-  } catch (e) {
-    // Log error and return error response
-    log('Error processing appointment booking request', e);
-    return NextResponse.json(
-      { 
-        tool_call_id: toolCallId,
-        status: 'error',
-        message: 'Failed to book appointment due to a server error. Please try again later.'
-      },
-      { 
-        status: 500,
-        headers: corsHeaders 
-      }
-    );
-  } finally {
-    try {
-      await prisma.$disconnect();
-    } catch {
-      // Ignore disconnect errors
+
+// --- Main API Route Handler ---
+export async function POST(request: Request) {
+  let toolCallId = 'unknown-tool-call-id'; // Default ID if extraction fails
+  log('Received request');
+
+  try {
+    // Handle CORS preflight request
+    if (request.method === 'OPTIONS') {
+      return new NextResponse(null, { status: 204, headers: corsHeaders });
     }
+
+    // --- Parameter Extraction ---
+    const reqBody: RequestBody = await request.json();
+    log('Request body received'); // Avoid logging full body in prod if sensitive
+
+    let functionParams: AppointmentParams | undefined;
+    let rawArgs: string | Record<string, unknown> | undefined;
+
+    // Extract toolCallId and arguments from various possible structures
+    if (reqBody.message?.toolCalls?.[0]?.id) {
+        toolCallId = reqBody.message.toolCalls[0].id;
+        rawArgs = reqBody.message.toolCalls[0].function?.arguments;
+    } else if (reqBody.message?.toolCallList?.[0]?.id) {
+        toolCallId = reqBody.message.toolCallList[0].id;
+        rawArgs = reqBody.message.toolCallList[0].function?.arguments;
+    } else if (reqBody.tool_call_id) {
+        toolCallId = reqBody.tool_call_id;
+        rawArgs = reqBody.parameters; // Assume parameters are the arguments
+    } else if (reqBody.toolCallId) {
+        toolCallId = reqBody.toolCallId;
+        rawArgs = reqBody.arguments;
+    } else if (Array.isArray(reqBody.toolCalls) && reqBody.toolCalls.length > 0) {
+        toolCallId = reqBody.toolCalls[0].id;
+        rawArgs = reqBody.toolCalls[0].function?.arguments;
+    }
+
+    // Parse arguments if they are a string
+    if (typeof rawArgs === 'string') {
+        try {
+            const parsedArgs = JSON.parse(rawArgs);
+            // Additional check after parsing
+            if (parsedArgs && typeof parsedArgs === 'object' &&
+                'start' in parsedArgs && typeof parsedArgs.start === 'string' &&
+                'name' in parsedArgs && typeof parsedArgs.name === 'string' &&
+                'email' in parsedArgs && typeof parsedArgs.email === 'string') {
+                functionParams = {
+                    start: parsedArgs.start,
+                    name: parsedArgs.name,
+                    email: parsedArgs.email,
+                    smsReminderNumber: typeof parsedArgs.smsReminderNumber === 'string' ? parsedArgs.smsReminderNumber : undefined
+                };
+            } else {
+                 log('Error: Parsed stringified arguments are missing required fields or have incorrect types', { parsedArgs });
+                 return createVapiResponse(toolCallId, undefined, 'Could not understand the provided appointment details (invalid format).', 400);
+            }
+        } catch (parseError) {
+            log('Error parsing stringified arguments', { rawArgs, error: parseError });
+            return createVapiResponse(toolCallId, undefined, 'Could not understand the provided appointment details.', 400);
+        }
+    } else if (typeof rawArgs === 'object' && rawArgs !== null) {
+        // Type guard to ensure rawArgs has the required properties
+        if ('start' in rawArgs && typeof rawArgs.start === 'string' &&
+            'name' in rawArgs && typeof rawArgs.name === 'string' &&
+            'email' in rawArgs && typeof rawArgs.email === 'string') {
+            // Create a new object matching the interface instead of asserting
+            functionParams = {
+                start: rawArgs.start,
+                name: rawArgs.name,
+                email: rawArgs.email,
+                smsReminderNumber: 'smsReminderNumber' in rawArgs && typeof rawArgs.smsReminderNumber === 'string'
+                    ? rawArgs.smsReminderNumber
+                    : undefined
+            };
+        } else {
+            log('Error: Received object arguments are missing required fields or have incorrect types', { rawArgs });
+            return createVapiResponse(toolCallId, undefined, 'Could not understand the provided appointment details (invalid format).', 400);
+        }
+    }
+
+    log('Extracted parameters', { toolCallId, functionParams: functionParams ? 'extracted' : 'not found' });
+
+    if (!functionParams) {
+      log('Error: Missing function parameters in request body');
+      return createVapiResponse(toolCallId, undefined, 'Missing required appointment parameters.', 400);
+    }
+
+    const { start, name, email, smsReminderNumber } = functionParams;
+
+    // --- Input Validation ---
+    if (!start || !name || !email) {
+      log('Error: Missing required fields', { start: !!start, name: !!name, email: !!email });
+      return createVapiResponse(toolCallId, undefined, 'Start date, patient name, and email are required.', 400);
+    }
+
+    const appointmentDate = new Date(start);
+    if (Number.isNaN(appointmentDate.getTime())) { // Use Number.isNaN
+      log('Error: Invalid date format received', { start });
+      return createVapiResponse(toolCallId, undefined, `Invalid date format: ${start}. Please use ISO 8601 format.`, 400);
+    }
+
+    // Optional: Add validation for email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+        log('Error: Invalid email format', { email });
+        return createVapiResponse(toolCallId, undefined, `Invalid email format provided: ${email}.`, 400);
+    }
+
+    log(`Processing booking for: ${name} (${email}) at ${appointmentDate.toISOString()}`);
+
+    // --- Find or Create Patient ---
+    let patient: Patient | null = null;
+    let patientWasCreated = false;
+    const { firstName, lastName } = parseFullName(name);
+
+    try {
+      patient = await prisma.patient.findUnique({ where: { email } });
+
+      if (!patient) {
+        log(`Patient with email ${email} not found. Creating new patient.`);
+        const dentist = await prisma.user.findFirst({ where: { role: Role.DENTIST } }); // Use imported Enum
+        if (!dentist) {
+          log('CRITICAL Error: No DENTIST user found in the database.');
+          return createVapiResponse(toolCallId, undefined, 'Internal setup error. Cannot schedule appointment.', 500);
+        }
+
+        patient = await prisma.patient.create({
+          data: {
+            firstName,
+            lastName,
+            email,
+            phoneNumber: smsReminderNumber || null,
+            userId: dentist.id,
+          },
+        });
+        patientWasCreated = true;
+        log('New patient created successfully', { patientId: patient.id });
+      } else {
+        log('Existing patient found', { patientId: patient.id });
+        if (smsReminderNumber && patient.phoneNumber !== smsReminderNumber) {
+           await prisma.patient.update({
+             where: { id: patient.id },
+             data: { phoneNumber: smsReminderNumber },
+           });
+           log(`Updated phone number for existing patient ${patient.id}`);
+        }
+      }
+    } catch (dbError) {
+      log('Database error during patient find/create', dbError);
+      return createVapiResponse(toolCallId, undefined, 'There was an issue accessing patient records.', 500);
+    }
+
+    // --- Create Appointment ---
+    let newAppointment: Appointment | null = null;
+    try {
+      // Ensure patient is not null before proceeding
+      if (!patient) {
+           log('CRITICAL Error: Patient record is unexpectedly null before appointment creation.');
+           return createVapiResponse(toolCallId, undefined, 'Internal server error processing patient data.', 500);
+      }
+
+      newAppointment = await prisma.appointment.create({
+        data: {
+          date: appointmentDate,
+          reason: DEFAULT_APPOINTMENT_REASON,
+          patientType: patientWasCreated ? PatientType.NEW : PatientType.EXISTING,
+          status: 'SCHEDULED',
+          notes: `Booked via VAPI Tool.${smsReminderNumber ? ` SMS Reminder #: ${smsReminderNumber}` : ''}`,
+          patientId: patient.id,
+        },
+      });
+      log('Appointment created successfully in DB', { appointmentId: newAppointment.id });
+    } catch (dbError: unknown) {
+        log('Database error during appointment creation', dbError);
+        // Check for specific Prisma errors, like unique constraint violation if needed
+        // Example: if (dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2002') { ... }
+
+        // Attempt rollback if a new patient was created
+        if (patientWasCreated && patient?.id) {
+            log(`Attempting to rollback patient creation for ${patient.id}`);
+            await prisma.patient.delete({ where: { id: patient.id } }).catch(rollbackError => {
+                log(`CRITICAL: Failed to rollback patient creation for ${patient.id}`, rollbackError);
+                // Decide how to handle this - maybe log prominently
+            });
+        }
+        return createVapiResponse(toolCallId, undefined, 'Failed to save the appointment in the schedule. Please try again.', 500);
+    }
+
+    // --- Format Confirmation & Return Success ---
+    const formattedDate = formatConfirmationDate(appointmentDate);
+    const confirmationMessage = `Okay, I've booked the appointment for ${name} on ${formattedDate}.`;
+    log('Sending success response', { confirmationMessage });
+
+    return createVapiResponse(toolCallId, confirmationMessage);
+
+  } catch (error) {
+    log('Unhandled error in POST handler', error);
+    const message = error instanceof Error ? error.message : 'An unknown server error occurred.';
+    // Ensure a Vapi-compatible error format even for unexpected errors
+    return createVapiResponse(toolCallId, undefined, `Booking failed due to an unexpected error: ${message}`, 500);
+  } finally {
+    await prisma.$disconnect().catch(e => log('Error disconnecting Prisma', e));
   }
 }
 
-// Handle CORS preflight
+// Handle CORS preflight OPTIONS request
 export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders,
-  });
-} 
+  return new NextResponse(null, { status: 204, headers: corsHeaders });
+}
