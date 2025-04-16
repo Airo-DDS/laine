@@ -66,7 +66,8 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="hidden h-screen w-64 flex-col border-r p-4 md:flex">
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex fixed top-0 left-0 h-screen w-64 flex-col border-r p-4 overflow-y-auto">
         <div className="flex items-center gap-2 pb-6">
           <div className="rounded-full bg-primary p-1">
             <div className="h-8 w-8 rounded-full bg-white text-center text-xl font-bold leading-8 text-primary">
