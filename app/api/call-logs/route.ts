@@ -28,8 +28,8 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     // Keep assistantId filtering optional for now, can fetch all org logs
     const assistantId = searchParams.get('assistantId');
-    // Add pagination/filtering params later if needed
-    const limit = Number.parseInt(searchParams.get('limit') || '50', 10);
+    // Default to 10 most recent calls unless specified otherwise
+    const limit = Number.parseInt(searchParams.get('limit') || '10', 10);
 
     const VAPI_API_KEY = process.env.VAPI_API_KEY;
     if (!VAPI_API_KEY) {
