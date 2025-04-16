@@ -29,6 +29,9 @@ import {
   Menu,
   LogOut,
   Sparkles,
+  Calendar,
+  PhoneCall,
+  CheckSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -37,6 +40,21 @@ const navigationItems = [
     name: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    name: "Calendar",
+    href: "/calendar",
+    icon: Calendar,
+  },
+  {
+    name: "Tasks",
+    href: "/tasks",
+    icon: CheckSquare,
+  },
+  {
+    name: "Call Logs",
+    href: "/call-logs",
+    icon: PhoneCall,
   },
   {
     name: "Communications",
