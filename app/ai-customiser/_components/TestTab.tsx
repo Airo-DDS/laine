@@ -246,7 +246,7 @@ export function TestTab({ assistantId }: TestTabProps) {
             Call +1 (603) 514 5807
           </div>
         </a>
-        <p className="text-blue-100 text-sm relative z-10">Our AI dental specialists are ready to help</p>
+        <p className="text-blue-100 text-sm relative z-10">Laine is ready to help</p>
       </div>
 
       {/* Transcript Display Area */}

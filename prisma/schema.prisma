@@ -9,35 +9,125 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// Organization Model
 model Organization {
-  id        String   @id @default(cuid())
-  name      String   @default("Default Practice")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  users     User[]
-  patients  Patient[]
-  appointments Appointment[]
-  knowledgeTopics KnowledgeTopic[]
-  tasks Task[]
+  id                   String               @id @default(cuid())
+  name                 String               @default("Default Practice")
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  appointments         Appointment[]
+  knowledgeTopics      KnowledgeTopic[]
+  patients             Patient[]
   roleResponsibilities RoleResponsibility[]
+  tasks                Task[]
+  users                User[]
 }
 
-// User model
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  role      Role     @default(RECEPTIONIST)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  patients  Patient[]
+  id             String        @id @default(uuid())
+  email          String        @unique
+  name           String?
+  role           Role          @default(RECEPTIONIST)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   organizationId String?
+  patients       Patient[]
+  assignedTasks  Task[]
   organization   Organization? @relation(fields: [organizationId], references: [id])
-  assignedTasks Task[] // Tasks assigned to this user
-  
+
+  @@index([organizationId])
+}
+
+model RoleResponsibility {
+  id             String       @id @default(cuid())
+  role           Role
+  description    String
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([role, organizationId])
+  @@index([organizationId])
+}
+
+model Patient {
+  id             String        @id @default(uuid())
+  firstName      String
+  lastName       String
+  email          String?       @unique
+  phoneNumber    String?
+  dateOfBirth    DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  userId         String
+  organizationId String?
+  appointments   Appointment[]
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([userId])
+}
+
+model Appointment {
+  id             String            @id @default(uuid())
+  date           DateTime
+  reason         String
+  patientType    PatientType       @default(EXISTING)
+  status         AppointmentStatus @default(SCHEDULED)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  patientId      String
+  organizationId String?
+  organization   Organization?     @relation(fields: [organizationId], references: [id])
+  patient        Patient           @relation(fields: [patientId], references: [id])
+  tasks          Task[]
+
+  @@index([organizationId])
+  @@index([patientId])
+}
+
+model Task {
+  id             String       @id @default(cuid())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  description    String
+  status         TaskStatus   @default(PENDING)
+  priority       TaskPriority @default(MEDIUM)
+  dueDate        DateTime?
+  assignedToId   String?
+  assignedRole   Role?
+  callId         String?
+  appointmentId  String?
+  organizationId String
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  assignedTo     User?        @relation(fields: [assignedToId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([assignedToId])
+  @@index([assignedRole])
+  @@index([status])
+  @@index([organizationId])
+  @@index([callId])
+  @@index([appointmentId])
+}
+
+model KnowledgeTopic {
+  id              String        @id @default(cuid())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  topicName       String
+  content         String
+  assistantId     String
+  vapiToolId      String?       @unique
+  vapiFileId      String?
+  vapiKbName      String?
+  vapiToolName    String?
+  vapiFileName    String?
+  vapiDescription String?
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([assistantId])
   @@index([organizationId])
 }
 
@@ -49,66 +139,9 @@ enum Role {
   BILLING_SPECIALIST
 }
 
-// Role Responsibility Model
-model RoleResponsibility {
-  id String @id @default(cuid())
-  role Role
-  description String @db.Text
-  organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@unique([role, organizationId])
-  @@index([organizationId])
-}
-
-// Patient model
-model Patient {
-  id           String    @id @default(uuid())
-  firstName    String
-  lastName     String
-  email        String?   @unique
-  phoneNumber  String?
-  dateOfBirth  DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  
-  userId       String    
-  user         User      @relation(fields: [userId], references: [id])
-  appointments Appointment[]
-  
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  
-  @@index([organizationId])
-  @@index([userId])
-}
-
 enum PatientType {
   NEW
   EXISTING
-}
-
-// Appointment model
-model Appointment {
-  id          String   @id @default(uuid())
-  date        DateTime
-  reason      String
-  patientType PatientType @default(EXISTING)
-  status      AppointmentStatus @default(SCHEDULED)
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  patientId   String
-  patient     Patient  @relation(fields: [patientId], references: [id])
-  
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  
-  tasks       Task[] // Link appointments to tasks
-  
-  @@index([organizationId])
-  @@index([patientId])
 }
 
 enum AppointmentStatus {
@@ -117,36 +150,6 @@ enum AppointmentStatus {
   CANCELLED
   COMPLETED
   NO_SHOW
-}
-
-// Task Model
-model Task {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  description   String   @db.Text
-  status        TaskStatus @default(PENDING)
-  priority      TaskPriority @default(MEDIUM)
-  dueDate       DateTime?
-  
-  assignedToId  String?
-  assignedTo    User?    @relation(fields: [assignedToId], references: [id])
-  assignedRole  Role?
-  
-  callId        String?
-  
-  appointmentId String?
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
-  
-  organizationId String
-  organization  Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-
-  @@index([assignedToId])
-  @@index([assignedRole])
-  @@index([status])
-  @@index([organizationId])
-  @@index([callId])
-  @@index([appointmentId])
 }
 
 enum TaskStatus {
@@ -161,29 +164,4 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
-}
-
-// KnowledgeTopic model
-model KnowledgeTopic {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  topicName     String   // User-facing name (e.g., "Office Hours")
-  content       String   @db.Text // The actual knowledge content provided by the user
-  assistantId   String   // ID of the Vapi Assistant this topic belongs to
-
-  // Vapi resource IDs - store them once created
-  vapiToolId    String?  @unique // The ID of the Vapi 'query' tool
-  vapiFileId    String?           // The ID of the Vapi file containing the content
-  vapiKbName    String?           // Generated internal KB name
-  vapiToolName  String?           // Generated internal tool name
-  vapiFileName  String?           // Generated internal file name
-  vapiDescription String?       // Generated description used for tool/kb
-
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-
-  @@index([assistantId])
-  @@index([organizationId])
 }
