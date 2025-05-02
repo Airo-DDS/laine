@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -104,9 +104,10 @@ export default function NexHealthTestPage() {
                 setBearerToken(data.bearerToken); // Store the token
                 setIsConnected(true);
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error('Failed to test connection:', error);
-            setConnectionResult({ success: false, message: `Client-side error: ${error.message}` });
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            setConnectionResult({ success: false, message: `Client-side error: ${errorMessage}` });
         } finally {
             setConnectionLoading(false);
         }
@@ -139,9 +140,10 @@ export default function NexHealthTestPage() {
                      setFetchAppointmentsError("No appointments found for the selected date range.");
                 }
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error('Failed to fetch appointments:', error);
-            setFetchAppointmentsError(`Client-side error: ${error.message}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            setFetchAppointmentsError(`Client-side error: ${errorMessage}`);
         } finally {
             setFetchAppointmentsLoading(false);
         }
@@ -174,9 +176,10 @@ export default function NexHealthTestPage() {
                 setAppointmentTypes(data.appointmentTypes || []);
                 setShowCreateForm(true); // Show form now that data is loaded
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error('Failed to prepare form:', error);
-            setPrepareFormError(`Client-side error: ${error.message}`);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            setPrepareFormError(`Client-side error: ${errorMessage}`);
         } finally {
             setPrepareFormLoading(false);
         }
@@ -195,7 +198,7 @@ export default function NexHealthTestPage() {
             // Attempt to parse the local time and convert to ISO string (assumes browser's local timezone)
             // For production, you might need a more robust timezone handling strategy
             startTimeISO = new Date(newAppointmentStartTime).toISOString();
-        } catch (e) {
+        } catch {
              setCreateAppointmentResult({ success: false, message: 'Invalid start date/time format.' });
              setCreateAppointmentLoading(false);
              return;
@@ -203,21 +206,26 @@ export default function NexHealthTestPage() {
 
 
         const appointmentData = {
-            patientId: parseInt(selectedPatientId, 10),
-            providerId: parseInt(selectedProviderId, 10),
-            operatoryId: selectedOperatoryId ? parseInt(selectedOperatoryId, 10) : undefined, // Operatory might be optional
-            appointmentTypeId: parseInt(selectedAppointmentTypeId, 10),
+            patientId: Number.parseInt(selectedPatientId, 10),
+            providerId: Number.parseInt(selectedProviderId, 10),
+            operatoryId: selectedOperatoryId ? Number.parseInt(selectedOperatoryId, 10) : undefined, // Operatory might be optional
+            appointmentTypeId: Number.parseInt(selectedAppointmentTypeId, 10),
             startTime: startTimeISO,
         };
 
         // Basic validation
-        if (isNaN(appointmentData.patientId) || isNaN(appointmentData.providerId) || isNaN(appointmentData.appointmentTypeId) || !appointmentData.startTime) {
+        if (
+            Number.isNaN(appointmentData.patientId) || 
+            Number.isNaN(appointmentData.providerId) || 
+            Number.isNaN(appointmentData.appointmentTypeId) || 
+            !appointmentData.startTime
+        ) {
              setCreateAppointmentResult({ success: false, message: 'Missing required fields for appointment creation.' });
              setCreateAppointmentLoading(false);
              return;
         }
          // Add check for operatory if required by location (this info isn't fetched here, but important in real app)
-         // if (locationRequiresOperatory && isNaN(appointmentData.operatoryId)) { ... }
+         // if (locationRequiresOperatory && Number.isNaN(appointmentData.operatoryId)) { ... }
 
 
         try {
@@ -240,28 +248,16 @@ export default function NexHealthTestPage() {
                 // Optionally clear the form or refetch appointments
                 // handleFetchAppointments(); // Refresh list after creation
             }
-        } catch (error: any) {
+        } catch (error) {
             console.error('Failed to create appointment:', error);
-            setCreateAppointmentResult({ success: false, message: `Client-side error: ${error.message}` });
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            setCreateAppointmentResult({ success: false, message: `Client-side error: ${errorMessage}` });
         } finally {
             setCreateAppointmentLoading(false);
         }
     };
 
     // --- Helper Functions ---
-    const formatDateTimeLocal = (isoString: string | null | undefined): string => {
-        if (!isoString) return '';
-        try {
-            const date = new Date(isoString);
-            // Adjust for local timezone offset before formatting
-            const offset = date.getTimezoneOffset() * 60000;
-            const localDate = new Date(date.getTime() - offset);
-            return localDate.toISOString().slice(0, 16); // Format for datetime-local input
-        } catch {
-            return ''; // Handle invalid date strings
-        }
-    };
-
     const formatDateDisplay = (isoString: string | null | undefined): string => {
          if (!isoString) return 'N/A';
          try {
@@ -408,9 +404,9 @@ export default function NexHealthTestPage() {
 
                         {fetchAppointmentsLoading && (
                             <div className="px-6 pb-6 space-y-2">
-                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse"></div>
-                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse"></div>
-                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse"></div>
+                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse" />
+                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse" />
+                                <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-full animate-pulse" />
                             </div>
                         )}
 
