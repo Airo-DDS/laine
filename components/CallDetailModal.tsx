@@ -68,7 +68,7 @@ export default function CallDetailModal({ isOpen, onOpenChange, callDetail }: Ca
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[90vw] w-[90vw] max-h-[90vh] h-[90vh] flex flex-col p-0">
+            <DialogContent className="max-w-[95vw] w-[95vw] min-w-[80vw] max-h-[90vh] h-[90vh] flex flex-col p-0">
                 <DialogHeader className="px-6 pt-6 pb-2 border-b">
                     <DialogTitle>Call Details: {callDetail.id}</DialogTitle>
                     <DialogDescription>
@@ -80,8 +80,8 @@ export default function CallDetailModal({ isOpen, onOpenChange, callDetail }: Ca
                 <div className="flex-1 overflow-hidden px-6">
                     <ScrollArea className="h-full py-4">
                         <div className="space-y-6">
-                            {/* Top row: AI Summary and Transcript */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Three column layout: AI Summary, Transcript, and Recording/Data */}
+                            <div className="grid grid-cols-1 xl:grid-cols-3 lg:grid-cols-2 gap-6">
                                 {/* AI Summary */}
                                 <Card className="flex flex-col">
                                     <CardHeader>
@@ -90,7 +90,7 @@ export default function CallDetailModal({ isOpen, onOpenChange, callDetail }: Ca
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="flex-grow">
-                                        <ScrollArea className="h-[300px]">
+                                        <ScrollArea className="h-[350px]">
                                             <div className="text-sm pr-4">
                                                 {callDetail.summary || <p className="text-muted-foreground italic">No summary available.</p>}
                                             </div>
@@ -101,61 +101,107 @@ export default function CallDetailModal({ isOpen, onOpenChange, callDetail }: Ca
                                 {/* Transcript */}
                                 <Card className="flex flex-col">
                                     <CardHeader>
-                                        <CardTitle className="text-base">Transcript</CardTitle>
+                                        <CardTitle className="text-base flex items-center">
+                                            <Bot className="mr-2 h-4 w-4"/> Transcript
+                                        </CardTitle>
                                     </CardHeader>
                                     <CardContent className="flex-grow p-0">
-                                        <ScrollArea className="h-[300px] px-6">
+                                        <ScrollArea className="h-[350px] px-6">
                                             <div className="py-2">
                                                 {formatTranscript(callDetail.transcript)}
                                             </div>
                                         </ScrollArea>
                                     </CardContent>
                                 </Card>
-                            </div>
 
-                            {/* Bottom row: Recording */}
-                            {callDetail.recordingUrl && (
-                                <Card className="border-2 border-primary/50 shadow-md">
-                                    <CardHeader className="bg-primary/10">
-                                        <CardTitle className="text-lg flex items-center">
-                                            <AudioLines className="mr-2 h-6 w-6 text-primary"/> Call Recording
+                                {/* Recording and Additional Data */}
+                                <Card className="flex flex-col">
+                                    <CardHeader>
+                                        <CardTitle className="text-base flex items-center">
+                                            <AudioLines className="mr-2 h-4 w-4"/> Media & Data
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="p-6">
-                                        <div className="bg-white rounded-lg p-4 flex flex-col items-center shadow">
-                                            <p className="text-base mb-3 font-medium">Listen to call recording:</p>
-                                            <audio 
-                                                controls 
-                                                className="w-full h-16" 
-                                                src={callDetail.recordingUrl}
-                                                preload="auto"
-                                            >
-                                                <track kind="captions" srcLang="en" label="English" />
-                                                Your browser does not support the audio element.
-                                            </audio>
-                                            <p className="text-xs text-muted-foreground mt-2">
-                                                Click play to listen to the call
-                                            </p>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            )}
+                                    <CardContent className="flex-grow space-y-4">
+                                        {/* Enhanced Audio Player */}
+                                        {callDetail.recordingUrl && (
+                                            <div className="bg-gradient-to-br from-primary/5 to-primary/10 rounded-xl p-4 border border-primary/20">
+                                                <div className="flex items-center mb-3">
+                                                    <div className="bg-primary/10 p-2 rounded-lg mr-3">
+                                                        <AudioLines className="h-5 w-5 text-primary" />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-semibold text-sm">Call Recording</h4>
+                                                        <p className="text-xs text-muted-foreground">High quality audio</p>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white/80 backdrop-blur-sm rounded-lg p-3 shadow-sm">
+                                                    <audio 
+                                                        controls 
+                                                        className="w-full h-10 rounded-md"
+                                                        style={{
+                                                            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+                                                        }}
+                                                        src={callDetail.recordingUrl}
+                                                        preload="auto"
+                                                    >
+                                                        <track kind="captions" srcLang="en" label="English" />
+                                                        Your browser does not support the audio element.
+                                                    </audio>
+                                                </div>
+                                            </div>
+                                        )}
 
-                            {/* Structured Data Section (if available) */}
-                            {callDetail.structuredData && Object.keys(callDetail.structuredData).length > 0 && (
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle className="text-base">Structured Data</CardTitle>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <ScrollArea className="h-[200px]">
-                                            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
-                                                {JSON.stringify(callDetail.structuredData, null, 2)}
-                                            </pre>
-                                        </ScrollArea>
+                                        {/* Call Metadata */}
+                                        <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+                                            <h4 className="font-semibold text-sm mb-2">Call Information</h4>
+                                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                                <div>
+                                                    <span className="text-muted-foreground">Duration:</span>
+                                                    <p className="font-medium">
+                                                        {callDetail.durationSeconds 
+                                                            ? `${Math.floor(callDetail.durationSeconds / 60)}:${String(callDetail.durationSeconds % 60).padStart(2, '0')}`
+                                                            : 'N/A'
+                                                        }
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Status:</span>
+                                                    <Badge variant="outline" className="ml-1 text-xs">
+                                                        {callDetail.status}
+                                                    </Badge>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Started:</span>
+                                                    <p className="font-medium text-xs">
+                                                        {new Date(callDetail.createdAt).toLocaleTimeString()}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <span className="text-muted-foreground">Ended:</span>
+                                                    <p className="font-medium text-xs">
+                                                        {callDetail.endedAt 
+                                                            ? new Date(callDetail.endedAt).toLocaleTimeString()
+                                                            : 'N/A'
+                                                        }
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Structured Data */}
+                                        {callDetail.structuredData && Object.keys(callDetail.structuredData).length > 0 && (
+                                            <div>
+                                                <h4 className="font-semibold text-sm mb-2">Structured Data</h4>
+                                                <ScrollArea className="h-[150px]">
+                                                    <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
+                                                        {JSON.stringify(callDetail.structuredData, null, 2)}
+                                                    </pre>
+                                                </ScrollArea>
+                                            </div>
+                                        )}
                                     </CardContent>
                                 </Card>
-                            )}
+                            </div>
                         </div>
                     </ScrollArea>
                 </div>
