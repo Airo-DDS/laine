@@ -62,26 +62,36 @@ const CustomToolbar = (toolbar: ToolbarProps<CalendarEvent>) => {
   const goToCurrent = () => toolbar.onNavigate('TODAY');
 
   return (
-    <div className="rbc-toolbar mb-4 flex items-center justify-between flex-wrap gap-2">
-      <div className="flex items-center gap-2 flex-wrap"> {/* Toolbar buttons */} 
-        <Button variant="outline" size="sm" onClick={goToBack}>
-          <ChevronLeft className="mr-1 h-4 w-4" /> Prev
+    <div className="rbc-toolbar mb-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* Title - Always at top on mobile, centered on desktop */}
+      <div className="w-full sm:w-auto text-center sm:order-2">
+        <span className="rbc-toolbar-label text-lg font-semibold">
+          {toolbar.label}
+        </span>
+      </div>
+      
+      {/* Navigation buttons - Left side on desktop */}
+      <div className="flex items-center gap-2 sm:order-1">
+        <Button variant="outline" size="sm" onClick={goToBack} className="min-w-[70px]">
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          Prev
         </Button>
-        <Button variant="outline" size="sm" onClick={goToCurrent}>
+        <Button variant="outline" size="sm" onClick={goToCurrent} className="min-w-[70px]">
           Today
         </Button>
-        <Button variant="outline" size="sm" onClick={goToNext}>
-          Next <ChevronRight className="ml-1 h-4 w-4" />
+        <Button variant="outline" size="sm" onClick={goToNext} className="min-w-[70px]">
+          Next
+          <ChevronRight className="ml-1 h-4 w-4" />
         </Button>
       </div>
-      <span className="rbc-toolbar-label text-lg font-semibold order-first sm:order-none"> {/* Title */} 
-        {toolbar.label}
-      </span>
-      <div className="rbc-btn-group flex items-center gap-2"> {/* View switcher */} 
+
+      {/* View switcher - Right side on desktop */}
+      <div className="flex items-center gap-2 sm:order-3">
         <Button 
           variant={toolbar.view === 'week' ? 'secondary' : 'outline'} 
           size="sm" 
           onClick={() => toolbar.onView('week')}
+          className="min-w-[60px]"
         >
           Week
         </Button>
@@ -89,6 +99,7 @@ const CustomToolbar = (toolbar: ToolbarProps<CalendarEvent>) => {
           variant={toolbar.view === 'day' ? 'secondary' : 'outline'} 
           size="sm" 
           onClick={() => toolbar.onView('day')}
+          className="min-w-[50px]"
         >
           Day
         </Button>
