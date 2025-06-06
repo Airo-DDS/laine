@@ -22,7 +22,6 @@ import {
 } from "@/components/ui/sheet"
 import {
   LayoutDashboard,
-  MessageSquare,
   Users,
   Settings,
   User,
