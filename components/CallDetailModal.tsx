@@ -68,8 +68,8 @@ export default function CallDetailModal({ isOpen, onOpenChange, callDetail }: Ca
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-[90%] w-[90vw] h-[90vh] flex flex-col">
-                <DialogHeader>
+            <DialogContent className="max-w-[90vw] w-[90vw] max-h-[90vh] h-[90vh] flex flex-col p-0">
+                <DialogHeader className="px-6 pt-6 pb-2 border-b">
                     <DialogTitle>Call Details: {callDetail.id}</DialogTitle>
                     <DialogDescription>
                         Call started on {formatDate(callDetail.createdAt)}.
@@ -77,68 +77,90 @@ export default function CallDetailModal({ isOpen, onOpenChange, callDetail }: Ca
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex-grow flex flex-col overflow-hidden mt-4">
-                    {/* Top row: AI Summary and Transcript */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-grow mb-4">
-                        {/* AI Summary */}
-                        <Card className="flex flex-col h-full">
-                            <CardHeader>
-                                <CardTitle className="text-base flex items-center">
-                                    <FileText className="mr-2 h-4 w-4"/> AI Summary
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex-grow overflow-auto">
-                                <div className="text-sm">
-                                    {callDetail.summary || <p className="text-muted-foreground italic">No summary available.</p>}
-                                </div>
-                            </CardContent>
-                        </Card>
+                <div className="flex-1 overflow-hidden px-6">
+                    <ScrollArea className="h-full py-4">
+                        <div className="space-y-6">
+                            {/* Top row: AI Summary and Transcript */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* AI Summary */}
+                                <Card className="flex flex-col">
+                                    <CardHeader>
+                                        <CardTitle className="text-base flex items-center">
+                                            <FileText className="mr-2 h-4 w-4"/> AI Summary
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex-grow">
+                                        <ScrollArea className="h-[300px]">
+                                            <div className="text-sm pr-4">
+                                                {callDetail.summary || <p className="text-muted-foreground italic">No summary available.</p>}
+                                            </div>
+                                        </ScrollArea>
+                                    </CardContent>
+                                </Card>
 
-                        {/* Transcript */}
-                        <Card className="flex flex-col h-full">
-                            <CardHeader>
-                                <CardTitle className="text-base">Transcript</CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex-grow overflow-hidden p-0">
-                                <ScrollArea className="h-full max-h-[50vh] px-6">
-                                    <div className="py-2">
-                                        {formatTranscript(callDetail.transcript)}
-                                    </div>
-                                </ScrollArea>
-                            </CardContent>
-                        </Card>
-                    </div>
+                                {/* Transcript */}
+                                <Card className="flex flex-col">
+                                    <CardHeader>
+                                        <CardTitle className="text-base">Transcript</CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="flex-grow p-0">
+                                        <ScrollArea className="h-[300px] px-6">
+                                            <div className="py-2">
+                                                {formatTranscript(callDetail.transcript)}
+                                            </div>
+                                        </ScrollArea>
+                                    </CardContent>
+                                </Card>
+                            </div>
 
-                    {/* Bottom row: Recording */}
-                    {callDetail.recordingUrl && (
-                        <Card className="mb-4 border-2 border-primary/50 shadow-md">
-                            <CardHeader className="bg-primary/10">
-                                <CardTitle className="text-lg flex items-center">
-                                    <AudioLines className="mr-2 h-6 w-6 text-primary"/> Call Recording
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-6">
-                                <div className="bg-white rounded-lg p-4 flex flex-col items-center shadow">
-                                    <p className="text-base mb-3 font-medium">Listen to call recording:</p>
-                                    <audio 
-                                        controls 
-                                        className="w-full h-16" 
-                                        src={callDetail.recordingUrl}
-                                        preload="auto"
-                                    >
-                                        <track kind="captions" srcLang="en" label="English" />
-                                        Your browser does not support the audio element.
-                                    </audio>
-                                    <p className="text-xs text-muted-foreground mt-2">
-                                        Click play to listen to the call
-                                    </p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                            {/* Bottom row: Recording */}
+                            {callDetail.recordingUrl && (
+                                <Card className="border-2 border-primary/50 shadow-md">
+                                    <CardHeader className="bg-primary/10">
+                                        <CardTitle className="text-lg flex items-center">
+                                            <AudioLines className="mr-2 h-6 w-6 text-primary"/> Call Recording
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent className="p-6">
+                                        <div className="bg-white rounded-lg p-4 flex flex-col items-center shadow">
+                                            <p className="text-base mb-3 font-medium">Listen to call recording:</p>
+                                            <audio 
+                                                controls 
+                                                className="w-full h-16" 
+                                                src={callDetail.recordingUrl}
+                                                preload="auto"
+                                            >
+                                                <track kind="captions" srcLang="en" label="English" />
+                                                Your browser does not support the audio element.
+                                            </audio>
+                                            <p className="text-xs text-muted-foreground mt-2">
+                                                Click play to listen to the call
+                                            </p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                            {/* Structured Data Section (if available) */}
+                            {callDetail.structuredData && Object.keys(callDetail.structuredData).length > 0 && (
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="text-base">Structured Data</CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <ScrollArea className="h-[200px]">
+                                            <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
+                                                {JSON.stringify(callDetail.structuredData, null, 2)}
+                                            </pre>
+                                        </ScrollArea>
+                                    </CardContent>
+                                </Card>
+                            )}
+                        </div>
+                    </ScrollArea>
                 </div>
 
-                <DialogFooter className="pt-4 border-t">
+                <DialogFooter className="px-6 py-4 border-t bg-background">
                     <DialogClose asChild>
                         <Button type="button" variant="outline">Close</Button>
                     </DialogClose>
