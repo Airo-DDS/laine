@@ -57,11 +57,6 @@ const navigationItems = [
     icon: PhoneCall,
   },
   {
-    name: "Communications",
-    href: "/communications",
-    icon: MessageSquare,
-  },
-  {
     name: "Patient Management",
     href: "/patients",
     icon: Users,
