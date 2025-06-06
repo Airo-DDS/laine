@@ -30,7 +30,7 @@ export default function DashboardPage() {
         </div>
       </div>
       <div className="mt-8">
-        {/* Dashboard content will be added here */}
+        <h2>Welcome to the dashboard</h2>
       </div>
     </div>
   )
