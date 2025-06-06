@@ -65,11 +65,6 @@ const navigationItems = [
     href: "/ai-customiser",
     icon: Sparkles,
   },
-  {
-    name: "System",
-    href: "/system",
-    icon: Settings,
-  },
 ]
 
 export function Sidebar() {
